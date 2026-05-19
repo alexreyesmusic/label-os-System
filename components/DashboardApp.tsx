@@ -88,11 +88,9 @@ export function DashboardApp({
   }
 
   async function duplicate(module: ModuleConfig, row: Row) {
-    const copy = { ...row };
-    delete copy.id;
-    delete copy.created_at;
-    delete copy.updated_at;
-    delete copy.created_by;
+    const copy = Object.fromEntries(
+      Object.entries(row).filter(([key]: [string, unknown]) => !["id", "created_at", "updated_at", "created_by"].includes(key))
+    );
     const { error } = await supabase.from(module.table).insert({ ...copy, tenant_id: tenantState.id });
     if (error) return notify(error.message);
     await refresh(module.table);
@@ -258,19 +256,19 @@ export function DashboardApp({
               sortDir={sortDir}
               setSortDir={setSortDir}
               onCreate={() => setModal({ module: activeModule })}
-              onEdit={row => setModal({ module: activeModule, row })}
-              onDelete={row => remove(activeModule, row)}
-              onDuplicate={row => duplicate(activeModule, row)}
-              onArchive={row => archive(activeModule, row)}
-              onQuickStatus={(row, status) => quickStatus(activeModule, row, status)}
-              onConvert={row => convertToRelease(activeModule, row)}
-              onImport={file => importCSV(activeModule, file)}
+              onEdit={(row: Row) => setModal({ module: activeModule, row })}
+              onDelete={(row: Row) => remove(activeModule, row)}
+              onDuplicate={(row: Row) => duplicate(activeModule, row)}
+              onArchive={(row: Row) => archive(activeModule, row)}
+              onQuickStatus={(row: Row, status: string) => quickStatus(activeModule, row, status)}
+              onConvert={(row: Row) => convertToRelease(activeModule, row)}
+              onImport={(file: File) => importCSV(activeModule, file)}
               chartData={chartData}
             />
           )}
         </section>
       </main>
-      {modal && <CrudModal module={modal.module} row={modal.row} onClose={() => setModal(null)} onSave={values => save(modal.module, values)} uploadFile={uploadFile} />}
+      {modal && <CrudModal module={modal.module} row={modal.row} onClose={() => setModal(null)} onSave={(values: Record<string, unknown>) => save(modal.module, values)} uploadFile={uploadFile} />}
       {toast && <div className="fixed bottom-5 right-5 z-50 rounded-xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm font-bold text-[var(--brand)] shadow-2xl">{toast}</div>}
     </div>
   );
@@ -310,7 +308,7 @@ function Master({ stats, chartData, rowsByTable }: { stats: Record<string, numbe
   );
 }
 
-function ModuleView(props: {
+type ModuleViewProps = {
   module: ModuleConfig;
   rows: Row[];
   allRows: Row[];
@@ -328,7 +326,9 @@ function ModuleView(props: {
   onConvert: (row: Row) => void;
   onImport: (file: File) => void;
   chartData: ChartData;
-}) {
+};
+
+function ModuleView(props: ModuleViewProps) {
   const writable = canWrite(props.role, props.module);
   const statusValues = ["All", ...Array.from(new Set(props.allRows.map(row => String(row.status ?? row.contract_status ?? row.master_status ?? "")).filter(Boolean)))];
   const showFields = props.module.fields.slice(0, 5);
@@ -378,19 +378,21 @@ function ModuleView(props: {
   );
 }
 
+type CrudModalProps = {
+  module: ModuleConfig;
+  row?: Row;
+  onClose: () => void;
+  onSave: (values: Record<string, unknown>) => void;
+  uploadFile: (bucket: string, file: File) => Promise<string>;
+};
+
 function CrudModal({
   module,
   row,
   onClose,
   onSave,
   uploadFile
-}: {
-  module: ModuleConfig;
-  row?: Row;
-  onClose: () => void;
-  onSave: (values: Record<string, unknown>) => void;
-  uploadFile: (bucket: string, file: File) => Promise<string>;
-}) {
+}: CrudModalProps) {
   const [values, setValues] = useState<Record<string, unknown>>(row ?? {});
   const [uploading, setUploading] = useState("");
 
@@ -419,17 +421,19 @@ function CrudModal({
   </div>;
 }
 
+type SettingsProps = {
+  tenant: Tenant;
+  profile: Profile;
+  onSave: (values: Partial<Tenant>) => void;
+  uploadFile: (bucket: string, file: File) => Promise<string>;
+};
+
 function Settings({
   tenant,
   profile,
   onSave,
   uploadFile
-}: {
-  tenant: Tenant;
-  profile: Profile;
-  onSave: (values: Partial<Tenant>) => void;
-  uploadFile: (bucket: string, file: File) => Promise<string>;
-}) {
+}: SettingsProps) {
   const [values, setValues] = useState<Partial<Tenant>>(tenant);
   async function uploadLogo(file: File) {
     const logoUrl = await uploadFile("covers", file);
