@@ -1,5 +1,5 @@
-import { logout } from "@/app/auth/actions";
+import { redirect } from "next/navigation";
 
-export async function POST() {
-  await logout();
+export function POST() {
+  redirect("/login");
 }

@@ -8,8 +8,8 @@ export default function Page() {
         <h1 className="mt-5 max-w-4xl text-5xl font-black tracking-tight md:text-7xl">Demo premium para sellos modernos.</h1>
         <p className="mt-6 max-w-2xl text-lg text-zinc-400">A SaaS operating system for record labels: demos, tracks, artists, releases, revenue, campaigns, content and distribution.</p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <Link href="/signup" className="rounded-xl bg-acid px-5 py-3 font-black text-black">Start</Link>
-          <Link href="/login" className="rounded-xl border border-white/10 bg-white/[0.045] px-5 py-3 font-black">Login</Link>
+          <Link href="/dashboard" className="rounded-xl bg-acid px-5 py-3 font-black text-black">Entrar a la demo</Link>
+          <Link href="/login" className="rounded-xl border border-white/10 bg-white/[0.045] px-5 py-3 font-black">Login demo</Link>
         </div>
       </section>
     </main>
