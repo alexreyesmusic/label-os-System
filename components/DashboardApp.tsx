@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import {
   Area,
@@ -20,6 +20,8 @@ import {
   YAxis
 } from "recharts";
 import { canWrite, modules, type FieldConfig, type ModuleConfig, type Role } from "@/lib/modules";
+import type { Membership, Profile, Workspace } from "@/lib/server-data";
+import { createClient } from "@/lib/supabase/browser";
 
 type RowValue = string | number | boolean | null;
 type Row = Record<string, RowValue>;
@@ -30,33 +32,9 @@ type Field = {
   type?: "text" | "textarea" | "select" | "file" | "date" | "number" | "url" | "boolean";
   options?: string[];
 };
-type TenantConfig = {
-  id: string;
-  label_name: string;
-  logo_url: string;
-  country: string;
-  currency: string;
-  main_genre: string;
-  primary_color: string;
-  timezone: string;
-  workspace_name: string;
-};
-
-const STORAGE_KEY = "label-os-demo-data-v4";
-const CONFIG_KEY = "label-os-demo-config-v4";
-const defaultTenant: TenantConfig = {
-  id: "demo-tenant",
-  label_name: "Reyesound Records",
-  logo_url: "",
-  country: "Spain",
-  currency: "EUR",
-  main_genre: "Underground House / Deep Tech",
-  primary_color: "#B6FF1A",
-  timezone: "Europe/Madrid",
-  workspace_name: "Label OS"
-};
 
 const cleanupModule = { key: "cleanup", label: "Data Cleanup", icon: "⌫" };
+const helpModule = { key: "help", label: "Help / How it works", icon: "?" };
 const systemModules = [
   { key: "master", label: "Master Dashboard", icon: "◆" },
   ...modules.map(module => ({ key: module.key, label: module.label, icon: module.icon })),
@@ -64,103 +42,85 @@ const systemModules = [
   { key: "settings", label: "Settings", icon: "⚙" }
 ];
 
-export function DashboardApp() {
-  const [config, setConfig] = useState<TenantConfig>(defaultTenant);
-  const [data, setData] = useState<RowsByTable>(demoData);
+export function DashboardApp({
+  workspace,
+  profile,
+  membership,
+  initialRows
+}: {
+  workspace: Workspace;
+  profile: Profile;
+  membership: Membership;
+  initialRows: RowsByTable;
+}) {
+  const supabase = createClient();
+  const [workspaceState, setWorkspaceState] = useState<Workspace>(workspace);
+  const [data, setData] = useState<RowsByTable>(initialRows);
   const [active, setActive] = useState("master");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
-  const [role, setRole] = useState<Role>("owner");
   const [modal, setModal] = useState<{ module: ModuleConfig; row?: Row } | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [toast, setToast] = useState("");
+  const role = membership.role;
   const activeModule = modules.find(module => module.key === active);
-
-  useEffect(() => {
-    const savedData = window.localStorage.getItem(STORAGE_KEY);
-    const savedConfig = window.localStorage.getItem(CONFIG_KEY);
-    if (savedData) setData(JSON.parse(savedData) as RowsByTable);
-    if (savedConfig) setConfig(JSON.parse(savedConfig) as TenantConfig);
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }, [data]);
-
-  useEffect(() => {
-    window.localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-  }, [config]);
 
   function notify(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 2400);
   }
 
-  function reset() {
-    if (!confirm("Reset demo data? This will replace your current browser data.")) return;
-    setData(demoData);
-    setConfig(defaultTenant);
-    notify("Demo data reset");
+  async function refresh(table: string) {
+    const { data: rows, error } = await supabase.from(table).select("*").eq("workspace_id", workspaceState.id).order("created_at", { ascending: false });
+    if (error) return notify(error.message);
+    setData(prev => ({ ...prev, [table]: (rows ?? []) as Row[] }));
   }
 
-  function clearAll() {
-    if (!confirm("Clear all local demo data?")) return;
-    const empty = Object.fromEntries(modules.map(module => [module.table, []])) as RowsByTable;
-    setData(empty);
-    notify("Data cleared");
-  }
-
-  function save(module: ModuleConfig, values: Row) {
+  async function save(module: ModuleConfig, values: Row) {
     const existingId = String(values.id ?? "");
-    const now = new Date().toISOString();
-    const payload = buildPayload(module, values);
-    setData(prev => {
-      const rows = prev[module.table] ?? [];
-      const nextRow: Row = {
-        ...payload,
-        id: existingId || crypto.randomUUID(),
-        tenant_id: config.id,
-        created_at: existingId ? values.created_at ?? now : now,
-        updated_at: now
-      };
-      return {
-        ...prev,
-        [module.table]: existingId ? rows.map(row => String(row.id) === existingId ? nextRow : row) : [nextRow, ...rows]
-      };
-    });
+    const payload = { ...buildPayload(module, values), workspace_id: workspaceState.id };
+    const request = existingId
+      ? supabase.from(module.table).update(payload).eq("id", existingId)
+      : supabase.from(module.table).insert(payload);
+
+    const { error } = await request;
+    if (error) return notify(error.message);
     setModal(null);
+    await refresh(module.table);
     notify(existingId ? "Changes saved" : "Item created");
   }
 
-  function remove(module: ModuleConfig, row: Row) {
+  async function remove(module: ModuleConfig, row: Row) {
     if (!confirm("Delete this item? This action cannot be undone.")) return;
-    setData(prev => ({ ...prev, [module.table]: (prev[module.table] ?? []).filter(item => String(item.id) !== String(row.id)) }));
+    const { error } = await supabase.from(module.table).delete().eq("id", String(row.id));
+    if (error) return notify(error.message);
+    await refresh(module.table);
     notify("Item deleted");
   }
 
-  function duplicate(module: ModuleConfig, row: Row) {
-    const now = new Date().toISOString();
-    const copy = Object.fromEntries(Object.entries(row).filter(([key]) => !["id", "created_at", "updated_at"].includes(key))) as Row;
-    setData(prev => ({ ...prev, [module.table]: [{ ...copy, id: crypto.randomUUID(), created_at: now, updated_at: now }, ...(prev[module.table] ?? [])] }));
+  async function duplicate(module: ModuleConfig, row: Row) {
+    const copy = Object.fromEntries(Object.entries(row).filter(([key]) => !["id", "created_at", "updated_at", "created_by"].includes(key))) as Row;
+    const { error } = await supabase.from(module.table).insert({ ...copy, workspace_id: workspaceState.id });
+    if (error) return notify(error.message);
+    await refresh(module.table);
     notify("Item duplicated");
   }
 
-  function archive(module: ModuleConfig, row: Row) {
-    updateRow(module.table, row, { status: "Archived" });
+  async function archive(module: ModuleConfig, row: Row) {
+    await updateRow(module.table, row, { status: "Archived" });
     notify("Item archived");
   }
 
-  function quickStatus(module: ModuleConfig, row: Row, status: string) {
-    updateRow(module.table, row, { status });
+  async function quickStatus(module: ModuleConfig, row: Row, status: string) {
+    await updateRow(module.table, row, { status });
     notify(`Status changed to ${status}`);
   }
 
-  function convertToRelease(module: ModuleConfig, row: Row) {
+  async function convertToRelease(module: ModuleConfig, row: Row) {
     const title = String(row.track_title ?? row.title ?? "Untitled Release");
-    const now = new Date().toISOString();
     const release: Row = {
-      id: crypto.randomUUID(),
-      tenant_id: config.id,
+      workspace_id: workspaceState.id,
       title,
       artist_name: String(row.artist_name ?? ""),
       cover_url: String(row.cover_url ?? row.artwork_link ?? ""),
@@ -174,23 +134,19 @@ export function DashboardApp() {
       artwork_status: row.cover_url || row.artwork_link ? "Uploaded" : "Missing",
       metadata_status: "Incomplete",
       campaign_status: "Not Started",
-      notes: String(row.internal_comments ?? row.notes ?? ""),
-      created_at: now,
-      updated_at: now
+      notes: String(row.internal_comments ?? row.notes ?? "")
     };
-    setData(prev => ({
-      ...prev,
-      releases: [release, ...(prev.releases ?? [])],
-      [module.table]: (prev[module.table] ?? []).map(item => String(item.id) === String(row.id) ? { ...item, status: "Approved", decision: "Yes", assigned_release: title, updated_at: now } : item)
-    }));
+    const { error } = await supabase.from("releases").insert(release);
+    if (error) return notify(error.message);
+    await updateRow(module.table, row, { status: "Approved", decision: "Yes", assigned_release: title });
+    await Promise.all([refresh(module.table), refresh("releases")]);
     notify("Track converted into release");
   }
 
-  function updateRow(table: string, row: Row, patch: Row) {
-    setData(prev => ({
-      ...prev,
-      [table]: (prev[table] ?? []).map(item => String(item.id) === String(row.id) ? { ...item, ...patch, updated_at: new Date().toISOString() } : item)
-    }));
+  async function updateRow(table: string, row: Row, patch: Row) {
+    const { error } = await supabase.from(table).update(patch).eq("id", String(row.id));
+    if (error) return notify(error.message);
+    await refresh(table);
   }
 
   function exportCSV(module?: ModuleConfig) {
@@ -211,16 +167,43 @@ export function DashboardApp() {
     const [headerLine, ...lines] = text.split(/\r?\n/).filter(Boolean);
     if (!headerLine) return notify("CSV is empty");
     const headers = headerLine.split(",").map(item => item.replaceAll('"', "").trim());
-    const now = new Date().toISOString();
     const records = lines.map(line => {
       const values = line.split(",").map(item => item.replaceAll(/^"|"$/g, "").replaceAll('""', '"'));
       return headers.reduce<Row>((acc, key, index) => {
         acc[key] = values[index] ?? "";
         return acc;
-      }, { id: crypto.randomUUID(), tenant_id: config.id, created_at: now, updated_at: now });
+      }, { workspace_id: workspaceState.id });
     });
-    setData(prev => ({ ...prev, [module.table]: [...records, ...(prev[module.table] ?? [])] }));
+    const { error } = await supabase.from(module.table).insert(records);
+    if (error) return notify(error.message);
+    await refresh(module.table);
     notify("CSV imported");
+  }
+
+  async function clearCategory(table: string) {
+    if (!confirm(`Delete all records from ${table}?`)) return;
+    const { error } = await supabase.from(table).delete().eq("workspace_id", workspaceState.id);
+    if (error) return notify(error.message);
+    await refresh(table);
+    notify("Category deleted");
+  }
+
+  async function saveWorkspace(values: Workspace) {
+    const { data: updated, error } = await supabase
+      .from("workspaces")
+      .update({
+        label_name: values.label_name,
+        country: values.country,
+        currency: values.currency,
+        main_genre: values.main_genre,
+        brand_color: values.brand_color
+      })
+      .eq("id", workspaceState.id)
+      .select("*")
+      .single();
+    if (error) return notify(error.message);
+    setWorkspaceState(updated as Workspace);
+    notify("Settings saved");
   }
 
   const currentRows = activeModule ? data[activeModule.table] ?? [] : [];
@@ -234,18 +217,18 @@ export function DashboardApp() {
   const chartData = useMemo(() => makeCharts(data), [data]);
 
   return (
-    <div className="relative flex min-h-screen overflow-hidden bg-[#060709]" style={{ "--brand": config.primary_color, "--accent": "#2F7DFF" } as CSSProperties}>
+    <div className="relative flex min-h-screen overflow-hidden bg-[#060709]" style={{ "--brand": workspaceState.brand_color, "--accent": "#2F7DFF" } as CSSProperties}>
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(182,255,26,.10),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(47,125,255,.12),transparent_30%)]" />
       <aside className="fixed bottom-0 left-0 top-0 z-30 hidden w-72 border-r border-white/10 bg-black/55 p-4 shadow-2xl backdrop-blur-2xl lg:block">
         <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
           <div className="flex items-center gap-3">
-            <Logo config={config} />
+            <Logo workspace={workspaceState} />
             <div className="min-w-0">
               <p className="truncate text-sm font-black">Label OS</p>
-              <p className="truncate text-xs text-zinc-500">{config.label_name}</p>
+              <p className="truncate text-xs text-zinc-500">{workspaceState.label_name}</p>
             </div>
           </div>
-          <p className="mt-4 rounded-xl border border-white/10 bg-black/35 p-3 text-xs text-zinc-400">Demo mode · localStorage only</p>
+          <p className="mt-4 rounded-xl border border-white/10 bg-black/35 p-3 text-xs text-zinc-400">{role.toUpperCase()} access · {workspaceState.currency}</p>
         </div>
         <nav className="mt-5 space-y-1">
           {systemModules.map(item => (
@@ -261,16 +244,14 @@ export function DashboardApp() {
         <header className="sticky top-0 z-20 border-b border-white/10 bg-[#060709]/75 px-4 py-4 backdrop-blur-2xl md:px-7">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.25em] text-zinc-500">Label OS · Demo premium para sellos modernos</p>
+              <p className="text-xs font-black uppercase tracking-[0.25em] text-zinc-500">Label OS · Persistent workspace</p>
               <h1 className="mt-1 text-2xl font-black tracking-tight md:text-3xl">{active === "master" ? "MASTER DASHBOARD" : systemModules.find(item => item.key === active)?.label}</h1>
             </div>
             <div className="flex flex-col gap-2 md:flex-row">
               <input className="rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-sm outline-none transition focus:border-[var(--brand)] md:w-72" value={query} onChange={event => setQuery(event.target.value)} placeholder="Global search..." />
-              <select className={controlClass} value={role} onChange={event => setRole(event.target.value as Role)}>
-                {["owner", "admin", "ar", "marketing", "finance", "viewer"].map(item => <option key={item} value={item}>{item}</option>)}
-              </select>
+              <button onClick={() => setHelpOpen(true)} className={secondaryButton}>Help / How it works</button>
               <button onClick={() => exportCSV(activeModule)} className={secondaryButton}>Export CSV</button>
-              <button onClick={reset} className={secondaryButton}>Reset demo data</button>
+              <form action="/auth/logout" method="post"><button className={secondaryButton}>Logout</button></form>
             </div>
           </div>
           <div className="mt-3 flex gap-2 overflow-x-auto lg:hidden">
@@ -280,8 +261,8 @@ export function DashboardApp() {
 
         <section className="space-y-6 p-4 md:p-7">
           {active === "master" && <Master stats={stats} chartData={chartData} rowsByTable={data} />}
-          {active === "cleanup" && <Cleanup data={data} reset={reset} clearAll={clearAll} removeCategory={(key: string) => { if (confirm(`Delete all records from ${key}?`)) { setData(prev => ({ ...prev, [key]: [] })); notify("Item deleted"); } }} />}
-          {active === "settings" && <Settings config={config} setConfig={setConfig} reset={reset} clearAll={clearAll} exportCSV={() => exportCSV()} />}
+          {active === "cleanup" && <Cleanup data={data} removeCategory={clearCategory} />}
+          {active === "settings" && <Settings workspace={workspaceState} profile={profile} onSave={saveWorkspace} exportCSV={() => exportCSV()} />}
           {activeModule && (
             <ModuleView
               module={activeModule}
@@ -306,6 +287,7 @@ export function DashboardApp() {
         </section>
       </main>
       {modal && <CrudModal module={modal.module} row={modal.row} onClose={() => setModal(null)} onSave={(values: Row) => save(modal.module, values)} />}
+      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
       {toast && <div className="fixed bottom-5 right-5 z-50 rounded-xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm font-bold text-[var(--brand)] shadow-2xl">{toast}</div>}
     </div>
   );
@@ -317,7 +299,7 @@ function Master({ stats, chartData, rowsByTable }: { stats: Record<string, numbe
       <div className="rounded-3xl border border-white/10 bg-white/[0.045] p-6 shadow-2xl backdrop-blur-2xl">
         <p className="text-xs font-black uppercase tracking-[0.3em] text-[var(--brand)]">Label OS</p>
         <h2 className="mt-3 text-5xl font-black tracking-tight">MASTER DASHBOARD</h2>
-        <p className="mt-3 max-w-2xl text-zinc-400">Demo premium para sellos modernos. Changes are saved in this browser with localStorage.</p>
+        <p className="mt-3 max-w-2xl text-zinc-400">Manage your label workspace with persistent Supabase data protected by Row Level Security.</p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Stat label="Demos" value={stats.demos} />
@@ -437,8 +419,8 @@ function CrudModal({ module, row, onClose, onSave }: { module: ModuleConfig; row
   </div>;
 }
 
-function Cleanup({ data, reset, clearAll, removeCategory }: { data: RowsByTable; reset: () => void; clearAll: () => void; removeCategory: (key: string) => void }) {
-  return <Panel title="Data Cleanup" action={<div className="flex gap-2"><button onClick={reset} className={secondaryButton}>Reset demo data</button><button onClick={clearAll} className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 font-bold text-red-100">Clear all</button></div>}>
+function Cleanup({ data, removeCategory }: { data: RowsByTable; removeCategory: (key: string) => void }) {
+  return <Panel title="Data Cleanup">
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       {(Object.entries(data) as [string, Row[]][]).map(([key, value]: [string, Row[]]) => (
         <div key={key} className="rounded-2xl border border-white/10 bg-black/25 p-4">
@@ -451,23 +433,52 @@ function Cleanup({ data, reset, clearAll, removeCategory }: { data: RowsByTable;
   </Panel>;
 }
 
-function Settings({ config, setConfig, reset, clearAll, exportCSV }: { config: TenantConfig; setConfig: (value: TenantConfig) => void; reset: () => void; clearAll: () => void; exportCSV: () => void }) {
-  const [values, setValues] = useState<TenantConfig>(config);
-  return <Panel title="Settings / Branding" action={<div className="flex gap-2"><button onClick={exportCSV} className={secondaryButton}>Export all</button><button onClick={reset} className={secondaryButton}>Reset</button><button onClick={clearAll} className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 font-bold text-red-100">Clear</button></div>}>
+function Settings({ workspace, profile, onSave, exportCSV }: { workspace: Workspace; profile: Profile; onSave: (value: Workspace) => void; exportCSV: () => void }) {
+  const [values, setValues] = useState<Workspace>(workspace);
+  return <Panel title="Settings / Branding" action={<button onClick={exportCSV} className={secondaryButton}>Export all</button>}>
     <div className="grid gap-5 xl:grid-cols-[.8fr_1.2fr]">
       <div className="rounded-3xl border border-white/10 bg-black/25 p-5">
-        <Logo config={values} size="lg" />
+        <Logo workspace={values} size="lg" />
         <h3 className="mt-4 text-2xl font-black">{values.label_name}</h3>
-        <p className="text-sm text-zinc-500">{values.workspace_name} · {values.currency}</p>
+        <p className="text-sm text-zinc-500">{profile.email} · {values.currency}</p>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
-        {(["label_name", "workspace_name", "country", "currency", "main_genre", "timezone", "logo_url"] as const).map(key => <Input key={key} label={key.replaceAll("_", " ")} value={values[key]} onChange={value => setValues(prev => ({ ...prev, [key]: value }))} />)}
-        <label><span className="mb-1 block text-xs font-bold uppercase text-zinc-500">Primary color</span><input className={`${controlClass} h-11`} type="color" value={values.primary_color} onChange={event => setValues(prev => ({ ...prev, primary_color: event.target.value }))} /></label>
+        <Input label="Label name" value={values.label_name} onChange={value => setValues(prev => ({ ...prev, label_name: value }))} />
+        <Input label="Country" value={values.country ?? ""} onChange={value => setValues(prev => ({ ...prev, country: value }))} />
+        <Input label="Currency" value={values.currency} onChange={value => setValues(prev => ({ ...prev, currency: value }))} />
+        <Input label="Main genre" value={values.main_genre ?? ""} onChange={value => setValues(prev => ({ ...prev, main_genre: value }))} />
+        <label><span className="mb-1 block text-xs font-bold uppercase text-zinc-500">Brand color</span><input className={`${controlClass} h-11`} type="color" value={values.brand_color} onChange={event => setValues(prev => ({ ...prev, brand_color: event.target.value }))} /></label>
       </div>
     </div>
-    <button onClick={() => { setConfig(values); }} className="mt-5 rounded-xl bg-[var(--brand)] px-4 py-3 font-black text-black">Save Settings</button>
+    <button onClick={() => onSave(values)} className="mt-5 rounded-xl bg-[var(--brand)] px-4 py-3 font-black text-black">Save Settings</button>
   </Panel>;
 }
+
+function HelpModal({ onClose }: { onClose: () => void }) {
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+    <section className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-white/10 bg-[#0D1014]/95 p-6 shadow-2xl">
+      <div className="flex items-center justify-between gap-4"><h2 className="text-2xl font-black">Help / How it works</h2><button onClick={onClose} className={secondaryButton}>Close</button></div>
+      <div className="mt-5 grid gap-3 md:grid-cols-2">
+        {modules.map(module => <div key={module.key} className="rounded-2xl border border-white/10 bg-black/25 p-4"><p className="font-black">{module.label}</p><p className="mt-2 text-sm text-zinc-400">{moduleHelp[module.key] ?? "Create, edit, filter, export and manage records for this workspace."}</p></div>)}
+      </div>
+    </section>
+  </div>;
+}
+
+const moduleHelp: Record<string, string> = {
+  demos: "Review inbound demos, score A&R fit, approve, reject or convert tracks into releases.",
+  tracks: "Manage signed or shortlisted tracks, links, masters, contracts and release assignment.",
+  artists: "Keep artist contact details, status, notes and relationship history organized.",
+  releases: "Track release dates, metadata, artwork, contracts, masters, campaign status and distribution readiness.",
+  revenue: "Register revenue by platform and monitor gross revenue, expenses and payment status.",
+  royalties: "Manage split participants, percentages and royalty status.",
+  editorial: "Plan editorial content by channel, date, category and production state.",
+  social: "Schedule posts, track KPIs and monitor engagement performance.",
+  content: "Centralize content ideas, pillars, objectives, owners and production status.",
+  campaigns: "Plan marketing campaigns, budgets, reach, clicks and conversion performance.",
+  reports: "Store recurring A&R reports with reviewed demos, recommended tracks and next actions.",
+  distribution: "Track distributor uploads, approvals, DSP coverage and publication status."
+};
 
 function ModuleCharts({ moduleKey, chartData }: { moduleKey: string; chartData: ChartData }) {
   const config: Record<string, [string, keyof ChartData, "bar" | "pie" | "area" | "line"][]> = {
@@ -491,30 +502,51 @@ function ModuleCharts({ moduleKey, chartData }: { moduleKey: string; chartData: 
 function Panel({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return <section className="rounded-3xl border border-white/10 bg-white/[0.045] p-5 shadow-2xl backdrop-blur-2xl"><div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><h2 className="text-lg font-black tracking-tight">{title}</h2>{action}</div>{children}</section>;
 }
-function ChartPanel({ title, children }: { title: string; children: ReactNode }) { return <Panel title={title}>{children}</Panel>; }
-function Stat({ label, value }: { label: string; value: ReactNode }) { return <div className="rounded-3xl border border-white/10 bg-white/[0.045] p-5 shadow-xl backdrop-blur-xl"><p className="text-sm text-zinc-500">{label}</p><p className="mt-3 text-3xl font-black tracking-tight">{value}</p></div>; }
-function Badge({ children }: { children: ReactNode }) { return <span className="inline-flex rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-[var(--brand)]">{children}</span>; }
-function Empty({ text }: { text: string }) { return <div className="rounded-3xl border border-dashed border-white/15 bg-black/25 p-10 text-center text-sm text-zinc-400">{text}</div>; }
-function Logo({ config, size = "md" }: { config: TenantConfig; size?: "md" | "lg" }) {
-  const cls = size === "lg" ? "size-20 text-2xl" : "size-11";
-  if (config.logo_url) return <img alt="" src={config.logo_url} className={`${cls} rounded-2xl object-cover`} />;
-  return <div className={`${cls} flex items-center justify-center rounded-2xl font-black text-black`} style={{ background: config.primary_color }}>{config.label_name.slice(0, 2).toUpperCase()}</div>;
+
+function ChartPanel({ title, children }: { title: string; children: ReactNode }) {
+  return <Panel title={title}>{children}</Panel>;
 }
-function Input({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label><span className="mb-1 block text-xs font-bold uppercase text-zinc-500">{label}</span><input className={controlClass} value={value} onChange={event => onChange(event.target.value)} /></label>; }
+
+function Stat({ label, value }: { label: string; value: ReactNode }) {
+  return <div className="rounded-3xl border border-white/10 bg-white/[0.045] p-5 shadow-xl backdrop-blur-xl"><p className="text-sm text-zinc-500">{label}</p><p className="mt-3 text-3xl font-black tracking-tight">{value}</p></div>;
+}
+
+function Badge({ children }: { children: ReactNode }) {
+  return <span className="inline-flex rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-[var(--brand)]">{children}</span>;
+}
+
+function Empty({ text }: { text: string }) {
+  return <div className="rounded-3xl border border-dashed border-white/15 bg-black/25 p-10 text-center text-sm text-zinc-400">{text}</div>;
+}
+
+function Logo({ workspace, size = "md" }: { workspace: Workspace; size?: "md" | "lg" }) {
+  const cls = size === "lg" ? "size-20 text-2xl" : "size-11";
+  return <div className={`${cls} flex items-center justify-center rounded-2xl font-black text-black`} style={{ background: workspace.brand_color }}>{workspace.label_name.slice(0, 2).toUpperCase()}</div>;
+}
+
+function Input({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label><span className="mb-1 block text-xs font-bold uppercase text-zinc-500">{label}</span><input className={controlClass} value={value} onChange={event => onChange(event.target.value)} /></label>;
+}
 
 function AreaGraph({ data, dataKey }: { data: ChartRow[]; dataKey: string }) {
   return <div className="h-64"><ResponsiveContainer><AreaChart data={data}><defs><linearGradient id="brandArea" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="var(--brand)" stopOpacity={0.7} /><stop offset="100%" stopColor="var(--brand)" stopOpacity={0.04} /></linearGradient></defs><CartesianGrid stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#71717a" /><YAxis stroke="#71717a" /><Tooltip contentStyle={tooltipStyle} /><Area dataKey={dataKey} stroke="var(--brand)" fill="url(#brandArea)" /></AreaChart></ResponsiveContainer></div>;
 }
+
 function BarGraph({ data, dataKey }: { data: ChartRow[]; dataKey: string }) {
   return <div className="h-64"><ResponsiveContainer><BarChart data={data}><CartesianGrid stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#71717a" /><YAxis stroke="#71717a" /><Tooltip contentStyle={tooltipStyle} /><Bar dataKey={dataKey} radius={[8, 8, 0, 0]} fill="var(--brand)" /></BarChart></ResponsiveContainer></div>;
 }
+
 function LineGraph({ data, dataKey = "value" }: { data: ChartRow[]; dataKey?: string }) {
   return <div className="h-64"><ResponsiveContainer><LineChart data={data}><CartesianGrid stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#71717a" /><YAxis stroke="#71717a" /><Tooltip contentStyle={tooltipStyle} /><Line dataKey={dataKey} stroke="var(--brand)" strokeWidth={3} dot={false} /></LineChart></ResponsiveContainer></div>;
 }
+
 function PieGraph({ data }: { data: ChartRow[] }) {
   return <div className="h-64"><ResponsiveContainer><PieChart><Tooltip contentStyle={tooltipStyle} /><Legend /><Pie data={data} dataKey={metricKey(data)} nameKey="name" innerRadius={55} outerRadius={90}>{data.map((_, index) => <Cell key={index} fill={["#B6FF1A", "#2F7DFF", "#A78BFA", "#FB7185", "#FBBF24"][index % 5]} />)}</Pie></PieChart></ResponsiveContainer></div>;
 }
-function Activity({ text }: { text: string }) { return <div className="flex gap-3 rounded-2xl border border-white/10 bg-black/25 p-3"><span className="mt-1 size-2 rounded-full bg-[var(--brand)]" /><div><p className="text-sm font-semibold">{text}</p><p className="text-xs text-zinc-500">Local demo activity</p></div></div>; }
+
+function Activity({ text }: { text: string }) {
+  return <div className="flex gap-3 rounded-2xl border border-white/10 bg-black/25 p-3"><span className="mt-1 size-2 rounded-full bg-[var(--brand)]" /><div><p className="text-sm font-semibold">{text}</p><p className="text-xs text-zinc-500">Workspace activity</p></div></div>;
+}
 
 const controlClass = "w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none transition focus:border-[var(--brand)]";
 const secondaryButton = "rounded-lg border border-white/10 bg-white/[0.045] px-3 py-2 font-bold transition hover:bg-white/[0.08]";
@@ -530,6 +562,7 @@ function buildPayload(module: ModuleConfig, values: Row) {
   });
   return payload;
 }
+
 function renderCell(value: RowValue | undefined, field: FieldConfig) {
   if (!value) return "-";
   const text = String(value);
@@ -538,19 +571,31 @@ function renderCell(value: RowValue | undefined, field: FieldConfig) {
   if (field.type === "file") return text;
   return text;
 }
-function isImageUrl(url: string) { return /\.(png|jpg|jpeg|gif|webp|avif)$/i.test(url) || url.startsWith("http"); }
-function money(value: number) { return `${Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}€`; }
-function metricKey(data: ChartRow[]) { return Object.keys(data[0] ?? { value: 0 }).find(key => key !== "name") ?? "value"; }
+
+function isImageUrl(url: string) {
+  return /\.(png|jpg|jpeg|gif|webp|avif)$/i.test(url) || url.startsWith("http");
+}
+
+function money(value: number) {
+  return `${Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}€`;
+}
+
+function metricKey(data: ChartRow[]) {
+  return Object.keys(data[0] ?? { value: 0 }).find(key => key !== "name") ?? "value";
+}
+
 function groupCount(rows: Row[], key: string, fallback = "Unknown"): ChartRow[] {
   const counts = new Map<string, number>();
   rows.forEach(row => counts.set(String(row[key] ?? fallback), (counts.get(String(row[key] ?? fallback)) ?? 0) + 1));
   return Array.from(counts.entries()).map(([name, value]) => ({ name, value }));
 }
+
 function sumBy(rows: Row[], groupKey: string, valueKey: string, outKey = "value"): ChartRow[] {
   const sums = new Map<string, number>();
   rows.forEach(row => sums.set(String(row[groupKey] ?? "Unknown"), (sums.get(String(row[groupKey] ?? "Unknown")) ?? 0) + Number(row[valueKey] ?? 0)));
   return Array.from(sums.entries()).map(([name, value]) => ({ name, [outKey]: value }));
 }
+
 function byMonth(rows: Row[], dateKey: string, valueKey?: string, outKey = "count"): ChartRow[] {
   const sums = new Map<string, number>();
   rows.forEach(row => {
@@ -559,6 +604,7 @@ function byMonth(rows: Row[], dateKey: string, valueKey?: string, outKey = "coun
   });
   return Array.from(sums.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([name, value]) => ({ name, [outKey]: value }));
 }
+
 function computeStats(rows: RowsByTable) {
   const revenue = rows.revenue_records ?? [];
   const splits = rows.royalty_splits ?? [];
@@ -570,6 +616,7 @@ function computeStats(rows: RowsByTable) {
     pendingRoyalties: splits.filter(row => String(row.status ?? "").toLowerCase() !== "paid").reduce((sum, row) => sum + Number(row.percentage ?? 0), 0)
   };
 }
+
 function makeCharts(rows: RowsByTable): ChartData {
   const revenue = rows.revenue_records ?? [];
   const releases = rows.releases ?? [];
@@ -600,8 +647,8 @@ function makeCharts(rows: RowsByTable): ChartData {
     releaseTimeline: byMonth(releases, "release_date"),
     revenueByPlatform: sumBy(revenue, "platform", "gross_revenue", "revenue"),
     splitPercentages: splits.map(row => ({ name: String(row.participant_name ?? "Split"), percentage: Number(row.percentage ?? 0) })),
-    contentChannels: groupCount(rows.editorial_calendar ?? [], "channel"),
-    editorialWeeks: byMonth(rows.editorial_calendar ?? [], "date"),
+    contentChannels: groupCount(rows.editorial_calendar_items ?? [], "channel"),
+    editorialWeeks: byMonth(rows.editorial_calendar_items ?? [], "date"),
     socialReach: sumBy(social, "platform", "reach", "reach"),
     engagement: social.map(row => ({ name: String(row.hook ?? row.platform ?? "Post"), engagement: Number(row.reach ?? 0) ? ((Number(row.likes ?? 0) + Number(row.comments ?? 0) + Number(row.saves ?? 0) + Number(row.shares ?? 0)) / Number(row.reach)) * 100 : 0 })),
     socialClicks: byMonth(social, "publish_date", "clicks", "clicks"),
@@ -617,6 +664,7 @@ function makeCharts(rows: RowsByTable): ChartData {
     distributionStatus: groupCount(distribution, "status")
   };
 }
+
 function recentActivity(rows: RowsByTable) {
   return [
     `${rows.demos?.[0]?.track_title ?? "A demo"} reviewed by A&R`,
@@ -624,62 +672,4 @@ function recentActivity(rows: RowsByTable) {
     `${rows.campaigns?.[0]?.name ?? "A campaign"} performance changed`,
     `${rows.revenue_records?.[0]?.release_title ?? "Revenue"} synced in Revenue System`
   ];
-}
-
-let demoId = 0;
-const now = "2026-05-19T10:00:00.000Z";
-const demoData: RowsByTable = {
-  demos: [
-    row({ artist_name: "Nora Vela", track_title: "Sub Basement Signal", genre: "Deep Tech", bpm: 126, musical_key: "Fmin", mood: "Hypnotic", energy: "High", status: "Pending", ar_score: 8, label_fit: "High", decision: "Maybe", soundcloud_link: "https://soundcloud.com", drive_link: "https://drive.google.com", internal_comments: "Strong low-end identity." }),
-    row({ artist_name: "Miro Delta", track_title: "Warehouse Bloom", genre: "Minimal House", bpm: 124, musical_key: "Amin", mood: "Warm", energy: "Medium", status: "Approved", ar_score: 9, label_fit: "Perfect", decision: "Yes", assigned_release: "", soundcloud_link: "https://soundcloud.com" }),
-    row({ artist_name: "KAIRO-8", track_title: "Nocturne Bus", genre: "Tech House", bpm: 128, musical_key: "Gmin", mood: "Dark", energy: "Peak", status: "Rejected", ar_score: 5, label_fit: "Low", decision: "No" }),
-    row({ artist_name: "Luz V", track_title: "Acid Patio", genre: "Acid House", bpm: 125, musical_key: "Cmin", mood: "Raw", energy: "High", status: "Needs Changes", ar_score: 7, label_fit: "Medium", decision: "Maybe" })
-  ],
-  tracks: [
-    row({ artist_name: "Miro Delta", track_title: "Warehouse Bloom", bpm: 124, musical_key: "Amin", genre: "Minimal House", mood: "Warm", energy: "Medium", status: "Approved", ar_score: 9, label_fit: "Perfect", decision: "Yes", contract_status: "Sent", master_status: "Premaster", notes: "Ready for final master." })
-  ],
-  artists: [
-    row({ name: "Miro Delta", country: "Spain", email: "miro@example.com", instagram: "@mirodelta", soundcloud: "https://soundcloud.com", status: "Active", notes: "Signature groove." }),
-    row({ name: "Nora Vela", country: "Mexico", email: "nora@example.com", instagram: "@noravela", soundcloud: "https://soundcloud.com", status: "Negotiating", notes: "Great demo pipeline." }),
-    row({ name: "Luz V", country: "Colombia", email: "luz@example.com", instagram: "@luzv", soundcloud: "https://soundcloud.com", status: "New", notes: "Needs mix feedback." })
-  ],
-  releases: [
-    row({ title: "Warehouse Bloom", artist_name: "Miro Delta", release_type: "Single", status: "Master Approved", release_date: "2026-06-21", distribution_date: "2026-06-01", tracks_included: "Warehouse Bloom", contract_status: "Signed", master_status: "Approved", artwork_status: "Approved", metadata_status: "Complete", campaign_status: "Active", isrc: "ES-LO6-26-00001", upc: "198765432101", notes: "Lead single." }),
-    row({ title: "Sub Basement Signal", artist_name: "Nora Vela", release_type: "EP", status: "Contract Pending", release_date: "2026-08-02", distribution_date: "2026-07-12", tracks_included: "Sub Basement Signal, Resin Dub", contract_status: "Pending", master_status: "Pending", artwork_status: "Missing", metadata_status: "Incomplete", campaign_status: "Not Started" })
-  ],
-  revenue_records: [
-    row({ release_title: "Warehouse Bloom", artist_name: "Miro Delta", platform: "Beatport", gross_revenue: 1340, expenses: 180, status: "Paid", payment_date: "2026-05-10", notes: "Launch week." }),
-    row({ release_title: "Warehouse Bloom", artist_name: "Miro Delta", platform: "Spotify", gross_revenue: 620, expenses: 0, status: "Pending", payment_date: "2026-05-15", notes: "Editorial lift." })
-  ],
-  royalty_splits: [
-    row({ release_title: "Warehouse Bloom", participant_name: "Label OS Demo", participant_type: "Label", percentage: 50, status: "Paid" }),
-    row({ release_title: "Warehouse Bloom", participant_name: "Miro Delta", participant_type: "Artist", percentage: 50, status: "Pending" })
-  ],
-  campaigns: [
-    row({ name: "Warehouse Bloom Launch", type: "Release Campaign", objective: "Drive Beatport sales and saves", start_date: "2026-05-20", end_date: "2026-06-25", budget: 450, primary_channel: "Instagram", audience: "Deep tech DJs", release_title: "Warehouse Bloom", status: "Active", reach: 22000, clicks: 920, conversions: 84 }),
-    row({ name: "Demo Submission Push", type: "Demo Submission Campaign", objective: "Find underground producers", start_date: "2026-05-01", end_date: "2026-05-30", budget: 180, primary_channel: "TikTok", audience: "Producers", status: "Planning", reach: 9000, clicks: 320, conversions: 41 })
-  ],
-  content_items: [
-    row({ content_code: "CNT-001", topic: "How we select deep tech demos", pillar: "A&R", type: "Carousel", objective: "Authority", status: "Design", owner_name: "A&R", target_date: "2026-05-25", notes: "Use demo criteria." }),
-    row({ content_code: "CNT-002", topic: "Warehouse Bloom breakdown", pillar: "Releases", type: "Reel", objective: "Awareness", status: "Scheduled", owner_name: "Marketing", target_date: "2026-06-01" })
-  ],
-  social_posts: [
-    row({ platform: "Instagram", format: "Reel", hook: "This bassline was built for basements", caption: "Warehouse Bloom incoming.", hashtags: "#deeptech #housemusic", cta: "Pre-save now", publish_date: "2026-06-01", status: "Scheduled", reach: 12000, likes: 820, comments: 64, saves: 140, shares: 51, clicks: 220 }),
-    row({ platform: "TikTok", format: "Short", hook: "A&R reaction to a 9/10 demo", caption: "Demo inbox heat.", hashtags: "#musicproducer", cta: "Send demos", publish_date: "2026-05-28", status: "Draft", reach: 4500, likes: 310, comments: 24, saves: 55, shares: 18, clicks: 90 })
-  ],
-  editorial_calendar: [
-    row({ date: "2026-05-28", category: "Track Selection", title: "May underground picks", channel: "Newsletter", status: "In Production", owner_name: "Curator", cta: "Listen now", notes: "Include 8 tracks." }),
-    row({ date: "2026-06-01", category: "Release", title: "Warehouse Bloom pre-save", channel: "Instagram", status: "Scheduled", owner_name: "Marketing", cta: "Pre-save" })
-  ],
-  ar_reports: [
-    row({ period: "May 1-15", demos_reviewed: 42, tracks_recommended: "Warehouse Bloom, Sub Basement Signal", artists_contacted: "Miro Delta, Nora Vela", releases_tracking: "Warehouse Bloom", problems_detected: "Two contracts pending", next_actions: "Follow up masters", general_comments: "Strong month." })
-  ],
-  distribution_records: [
-    row({ release_title: "Warehouse Bloom", distributor: "Label Engine", upload_date: "2026-05-18", approval_date: "2026-05-20", dsps_active: 34, status: "Approved", notes: "Beatport genre confirmed." })
-  ]
-};
-
-function row(values: Row): Row {
-  demoId += 1;
-  return { id: `demo-${demoId}`, tenant_id: "demo-tenant", created_at: now, updated_at: now, ...values };
 }

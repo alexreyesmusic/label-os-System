@@ -14,7 +14,7 @@ export default function PricingPage() {
         <Link className="rounded-xl bg-acid px-4 py-2 font-black text-black" href="/signup">Start</Link>
       </div>
       <h1 className="mt-16 text-4xl font-black md:text-6xl">Pricing for modern labels.</h1>
-      <p className="mt-4 text-zinc-400">Stripe billing can be added on top of the tenant and role system.</p>
+      <p className="mt-4 text-zinc-400">Stripe billing can be added on top of the workspace and role system.</p>
       <div className="mt-10 grid gap-4 md:grid-cols-3">
         {plans.map(plan => (
           <article key={plan.name} className="rounded-3xl border border-white/10 bg-white/[0.045] p-6">

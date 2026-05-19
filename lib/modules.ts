@@ -161,7 +161,7 @@ export const modules: ModuleConfig[] = [
   {
     key: "editorial",
     label: "Editorial Calendar",
-    table: "editorial_calendar",
+    table: "editorial_calendar_items",
     icon: "□",
     allowed: marketingRoles,
     fields: [
