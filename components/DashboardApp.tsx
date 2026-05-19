@@ -25,6 +25,12 @@ import type { Membership, Profile, Tenant } from "@/lib/server-data";
 
 type Row = Record<string, unknown> & { id: string; tenant_id: string; created_by?: string; created_at?: string; updated_at?: string };
 type RowsByTable = Record<string, Row[]>;
+type Field = FieldConfig & {
+  key: string;
+  label: string;
+  type?: "text" | "textarea" | "select" | "file" | "number" | "date" | "url" | "boolean";
+  options?: string[];
+};
 
 const systemModules = [
   { key: "master", label: "Master Dashboard", icon: "◆" },
@@ -396,7 +402,7 @@ function CrudModal({
   const [values, setValues] = useState<Record<string, unknown>>(row ?? {});
   const [uploading, setUploading] = useState("");
 
-  async function handleFile(field: FieldConfig, file: File) {
+  async function handleFile(field: Field, file: File) {
     if (!field.bucket) return;
     setUploading(field.key);
     const url = await uploadFile(field.bucket, file);
@@ -408,10 +414,10 @@ function CrudModal({
     <form onSubmit={event => { event.preventDefault(); onSave(values); }} className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-3xl border border-white/10 bg-[#0D1014]/95 p-5 shadow-2xl backdrop-blur-2xl">
       <div className="mb-5 flex items-center justify-between"><h3 className="text-xl font-black">{row ? "Edit" : "Create"} {module.label}</h3><button type="button" onClick={onClose} className={secondaryButton}>Cancel</button></div>
       <div className="grid gap-3 md:grid-cols-2">
-        {module.fields.map(field => <label key={field.key} className="block">
+        {module.fields.map((field: Field) => <label key={field.key} className="block">
           <span className="mb-1 block text-xs font-bold uppercase text-zinc-500">{field.label}</span>
           {field.type === "textarea" && <textarea className={controlClass} rows={3} value={String(values[field.key] ?? "")} onChange={event => setValues({ ...values, [field.key]: event.target.value })} />}
-          {field.type === "select" && <select className={controlClass} value={String(values[field.key] ?? field.options?.[0] ?? "")} onChange={event => setValues({ ...values, [field.key]: event.target.value })}>{field.options?.map(option => <option key={option}>{option}</option>)}</select>}
+          {field.type === "select" && <select className={controlClass} value={String(values[field.key] ?? field.options?.[0] ?? "")} onChange={event => setValues({ ...values, [field.key]: event.target.value })}>{field.options?.map((option: string) => <option key={option} value={option}>{option}</option>)}</select>}
           {field.type === "file" && <div className="rounded-xl border border-dashed border-white/15 bg-black/30 p-3"><input type="file" onChange={event => event.target.files?.[0] && handleFile(field, event.target.files[0])} /><p className="mt-2 truncate text-xs text-zinc-500">{uploading === field.key ? "Uploading..." : String(values[field.key] ?? "Drag/drop via picker or paste URL after upload")}</p>{values[field.key] && isImageUrl(String(values[field.key])) && <img alt="" src={String(values[field.key])} className="mt-3 h-28 rounded-xl object-cover" />}</div>}
           {!["textarea", "select", "file"].includes(field.type ?? "text") && <input className={controlClass} type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"} value={String(values[field.key] ?? "")} onChange={event => setValues({ ...values, [field.key]: field.type === "number" ? Number(event.target.value) : event.target.value })} />}
         </label>)}
