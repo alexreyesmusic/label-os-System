@@ -1,58 +1,51 @@
-# Reyesound Label OS · Public Demo
+# Label OS
 
-Demo pública funcional para compartir con potenciales clientes.
+Premium SaaS for record label operations.
 
-## Qué incluye
+## Stack
 
-- Next.js + React + Tailwind CSS.
-- Sin backend.
-- Sin Supabase.
-- Sin Stripe.
-- Sin variables `.env`.
-- Sin base de datos externa.
-- Persistencia con `localStorage`.
-- Datos demo realistas de un sello de música electrónica underground.
-- Crear, editar, eliminar, filtrar, resetear y exportar CSV simulado.
-- Visual SaaS premium con glassmorphism, KPIs, charts fake, analytics fake, activity feed y branding editable.
+- Next.js
+- React
+- TypeScript
+- Tailwind CSS
+- Supabase Auth
+- Supabase Postgres
+- Supabase Storage
+- Supabase Row Level Security
+- Recharts
+- Vercel
 
-## Login demo
+## Setup
 
-Puedes entrar de dos formas:
-
-- Botón `Entrar a la demo sin contraseña`.
-- Credenciales demo:
-
-```text
-email: demo@labelos.com
-password: demo123
-```
-
-## Módulos activos
-
-- Master Dashboard
-- Demos
-- Artists
-- Releases
-- Revenue System
-- Editorial Calendar
-- Social Media
-- Content Master
-- Campaign DB
-- A&R Reports
-- Data Cleanup
-- Settings
-
-## Desarrollo local
+1. Install dependencies:
 
 ```bash
 npm install
+```
+
+2. Create `.env.local`:
+
+```bash
+cp .env.example .env.local
+```
+
+3. Run `supabase/schema.sql` in Supabase SQL editor.
+
+4. Configure Supabase Auth redirect URLs:
+
+```text
+http://localhost:3000/onboarding
+https://YOUR_DOMAIN/onboarding
+```
+
+5. Run locally:
+
+```bash
 npm run dev
 ```
 
-## Deploy
+## Branding
 
-Listo para publicar en Vercel o Netlify como una app Next.js normal. No hace falta configurar variables de entorno.
+Visible product branding is `Label OS`, `MASTER DASHBOARD`, and `Demo premium para sellos modernos`.
 
-## Nota
-
-Los datos se guardan solo en el navegador del usuario mediante `localStorage`. Para recuperar los datos originales, usa `Reset demo data`.
+Tenant names are editable in Settings. "Reyesound Records" is only a sample tenant value in onboarding.
