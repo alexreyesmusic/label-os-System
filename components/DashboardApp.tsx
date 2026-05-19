@@ -12,6 +12,33 @@ type WorkspaceConfig = {
   primary: string;
   accent: string;
 };
+type CrudModuleProps = {
+  table: string;
+  rows: Row[];
+  onCreate: () => void;
+  onEdit: (row: Row) => void;
+  onDelete: (id: string) => void;
+  exportCSV: () => void;
+};
+type CrudModalProps = {
+  table: string;
+  row?: Row;
+  onClose: () => void;
+  onSave: (values: Row) => void;
+};
+type CleanupProps = {
+  data: DemoState;
+  reset: () => void;
+  clearAll: () => void;
+  removeCategory: (key: string) => void;
+};
+type SettingsProps = {
+  reset: () => void;
+  clearAll: () => void;
+  exportCSV: () => void;
+  config: WorkspaceConfig;
+  setConfig: (config: WorkspaceConfig) => void;
+};
 
 const storageKey = "reyesound-label-os-public-demo-v1";
 const configKey = "reyesound-label-os-public-demo-config-v1";
@@ -351,12 +378,12 @@ export function DashboardApp() {
         <section className="p-4 md:p-7">
           {active === "master" && <Master stats={stats} alerts={alerts} data={data} activity={activity} config={config} />}
           {active === "settings" && <Settings reset={reset} clearAll={clearAll} exportCSV={() => exportCSV()} config={config} setConfig={setConfig} />}
-          {active === "cleanup" && <Cleanup data={data} reset={reset} clearAll={clearAll} removeCategory={(key) => { if (confirm(`¿Eliminar todos los registros de ${key}?`)) { setData(prev => ({ ...prev, [key]: [] })); notify("Elemento eliminado correctamente"); } }} />}
-          {table && <CrudModule table={table} rows={rows} onCreate={() => setModal({ table })} onEdit={(row) => setModal({ table, row })} onDelete={(id) => remove(table, id)} exportCSV={() => exportCSV(table)} />}
+          {active === "cleanup" && <Cleanup data={data} reset={reset} clearAll={clearAll} removeCategory={(key: string) => { if (confirm(`¿Eliminar todos los registros de ${key}?`)) { setData(prev => ({ ...prev, [key]: [] })); notify("Elemento eliminado correctamente"); } }} />}
+          {table && <CrudModule table={table} rows={rows} onCreate={() => setModal({ table })} onEdit={(row: Row) => setModal({ table, row })} onDelete={(id: string) => remove(table, id)} exportCSV={() => exportCSV(table)} />}
         </section>
       </main>
 
-      {modal && <CrudModal table={modal.table} row={modal.row} onClose={() => setModal(null)} onSave={(values) => save(modal.table, values)} />}
+      {modal && <CrudModal table={modal.table} row={modal.row} onClose={() => setModal(null)} onSave={(values: Row) => save(modal.table, values)} />}
       {toast && <div className="fixed bottom-5 right-5 z-50 rounded-xl border border-acid/30 bg-zinc-950 px-4 py-3 text-sm font-bold text-acid shadow-glow">{toast}</div>}
     </div>
   );
@@ -462,7 +489,7 @@ function Master({ stats, alerts, data, activity, config }: { stats: Record<strin
   );
 }
 
-function CrudModule({ table, rows, onCreate, onEdit, onDelete, exportCSV }: any) {
+function CrudModule({ table, rows, onCreate, onEdit, onDelete, exportCSV }: CrudModuleProps) {
   const showFields = (fields[table] ?? []).slice(0, 5);
   return (
     <Panel title={modules.find((m) => m[2] === table)?.[1] ?? table} action={<div className="flex gap-2"><button onClick={exportCSV} className="rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-sm font-bold transition hover:bg-white/[0.08]">Exportar CSV</button><button onClick={onCreate} className="rounded-xl px-4 py-2 text-sm font-black text-black transition hover:scale-[1.02]" style={{ background: "var(--brand)" }}>Nuevo</button></div>}>
@@ -490,7 +517,7 @@ function CrudModule({ table, rows, onCreate, onEdit, onDelete, exportCSV }: any)
   );
 }
 
-function CrudModal({ table, row, onClose, onSave }: any) {
+function CrudModal({ table, row, onClose, onSave }: CrudModalProps) {
   const [values, setValues] = useState<Row>(row ?? {});
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
@@ -513,11 +540,11 @@ function CrudModal({ table, row, onClose, onSave }: any) {
   );
 }
 
-function Cleanup({ data, reset, clearAll, removeCategory }: any) {
-  return <div className="space-y-5"><Panel title="Data Cleanup" action={<div className="flex gap-2"><button onClick={reset} className="rounded-xl px-3 py-2 text-sm font-black text-black" style={{ background: "var(--brand)" }}>Reset demo data</button><button onClick={clearAll} className="rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm font-bold text-red-100">Limpiar datos</button></div>}><div className="grid gap-3 md:grid-cols-3">{Object.entries(data).map(([key, value]: any) => <div key={key} className="rounded-3xl border border-white/10 bg-black/25 p-4 transition hover:bg-white/[0.035]"><div className="flex items-center justify-between"><h3 className="font-black capitalize">{key}</h3><Badge>{value.length}</Badge></div><p className="mt-2 text-sm text-zinc-500">Registros guardados localmente</p><button onClick={() => removeCategory(key)} className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 font-bold text-red-100 transition hover:bg-red-500/20">Eliminar categoría</button></div>)}</div></Panel></div>;
+function Cleanup({ data, reset, clearAll, removeCategory }: CleanupProps) {
+  return <div className="space-y-5"><Panel title="Data Cleanup" action={<div className="flex gap-2"><button onClick={reset} className="rounded-xl px-3 py-2 text-sm font-black text-black" style={{ background: "var(--brand)" }}>Reset demo data</button><button onClick={clearAll} className="rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm font-bold text-red-100">Limpiar datos</button></div>}><div className="grid gap-3 md:grid-cols-3">{(Object.entries(data) as [string, Row[]][]).map(([key, value]: [string, Row[]]) => <div key={key} className="rounded-3xl border border-white/10 bg-black/25 p-4 transition hover:bg-white/[0.035]"><div className="flex items-center justify-between"><h3 className="font-black capitalize">{key}</h3><Badge>{value.length}</Badge></div><p className="mt-2 text-sm text-zinc-500">Registros guardados localmente</p><button onClick={() => removeCategory(key)} className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2 font-bold text-red-100 transition hover:bg-red-500/20">Eliminar categoría</button></div>)}</div></Panel></div>;
 }
 
-function Settings({ reset, clearAll, exportCSV, config, setConfig }: any) {
+function Settings({ reset, clearAll, exportCSV, config, setConfig }: SettingsProps) {
   const control = "w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 outline-none transition focus:border-[var(--brand)]";
   return (
     <div className="space-y-5">
