@@ -28,13 +28,7 @@ export type Membership = {
   role: Role;
 };
 
-export type DataRow = Record<string, unknown> & {
-  id: string;
-  tenant_id: string;
-  created_by?: string;
-  created_at?: string;
-  updated_at?: string;
-};
+export type DataRow = Record<string, string | number | boolean | null>;
 
 export async function getTenantContext() {
   const supabase = await createClient();

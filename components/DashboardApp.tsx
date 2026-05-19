@@ -23,12 +23,13 @@ import { createClient } from "@/lib/supabase/browser";
 import { canWrite, modules, type FieldConfig, type ModuleConfig, type Role } from "@/lib/modules";
 import type { Membership, Profile, Tenant } from "@/lib/server-data";
 
-type Row = Record<string, unknown> & { id: string; tenant_id: string; created_by?: string; created_at?: string; updated_at?: string };
+type RowValue = string | number | boolean | null;
+type Row = Record<string, RowValue>;
 type RowsByTable = Record<string, Row[]>;
-type Field = FieldConfig & {
+type Field = {
   key: string;
   label: string;
-  type?: "text" | "textarea" | "select" | "file" | "number" | "date" | "url" | "boolean";
+  type?: "text" | "textarea" | "select" | "file" | "date" | "number";
   options?: string[];
 };
 
@@ -72,7 +73,7 @@ export function DashboardApp({
     setRowsByTable(prev => ({ ...prev, [table]: (data ?? []) as Row[] }));
   }
 
-  async function save(module: ModuleConfig, values: Record<string, unknown>) {
+  async function save(module: ModuleConfig, values: Row) {
     const payload = buildPayload(module, values, tenantState.id);
     const request = values.id
       ? supabase.from(module.table).update(payload).eq("id", values.id)
@@ -87,7 +88,7 @@ export function DashboardApp({
 
   async function remove(module: ModuleConfig, row: Row) {
     if (!confirm("Delete this item? This action cannot be undone.")) return;
-    const { error } = await supabase.from(module.table).delete().eq("id", row.id);
+    const { error } = await supabase.from(module.table).delete().eq("id", String(row.id));
     if (error) return notify(error.message);
     await refresh(module.table);
     notify("Item deleted");
@@ -95,7 +96,7 @@ export function DashboardApp({
 
   async function duplicate(module: ModuleConfig, row: Row) {
     const copy = Object.fromEntries(
-      Object.entries(row).filter(([key]: [string, unknown]) => !["id", "created_at", "updated_at", "created_by"].includes(key))
+      Object.entries(row).filter(([key]: [string, RowValue]) => !["id", "created_at", "updated_at", "created_by"].includes(key))
     );
     const { error } = await supabase.from(module.table).insert({ ...copy, tenant_id: tenantState.id });
     if (error) return notify(error.message);
@@ -104,7 +105,7 @@ export function DashboardApp({
   }
 
   async function quickStatus(module: ModuleConfig, row: Row, status: string) {
-    const { error } = await supabase.from(module.table).update({ status }).eq("id", row.id);
+    const { error } = await supabase.from(module.table).update({ status }).eq("id", String(row.id));
     if (error) return notify(error.message);
     await refresh(module.table);
     notify(`Status changed to ${status}`);
@@ -128,14 +129,14 @@ export function DashboardApp({
       notes: row.internal_comments ?? row.notes ?? null
     });
     if (releaseError) return notify(releaseError.message);
-    await supabase.from(module.table).update({ status: "Approved", decision: "Yes", assigned_release: title }).eq("id", row.id);
+    await supabase.from(module.table).update({ status: "Approved", decision: "Yes", assigned_release: title }).eq("id", String(row.id));
     await Promise.all([refresh(module.table), refresh("releases")]);
     notify("Track converted into release");
   }
 
   async function archive(module: ModuleConfig, row: Row) {
     if (!("status" in row)) return notify("This item has no status field");
-    const { error } = await supabase.from(module.table).update({ status: "Archived" }).eq("id", row.id);
+    const { error } = await supabase.from(module.table).update({ status: "Archived" }).eq("id", String(row.id));
     if (error) return notify(error.message);
     await refresh(module.table);
     notify("Item archived");
@@ -172,7 +173,7 @@ export function DashboardApp({
     const headers = headerLine.split(",").map(item => item.replaceAll('"', "").trim());
     const records = lines.map(line => {
       const values = line.split(",").map(item => item.replaceAll(/^"|"$/g, "").replaceAll('""', '"'));
-      return headers.reduce<Record<string, unknown>>((acc, key, index) => {
+      return headers.reduce<Row>((acc, key, index) => {
         acc[key] = values[index] ?? "";
         return acc;
       }, { tenant_id: tenantState.id });
@@ -274,7 +275,7 @@ export function DashboardApp({
           )}
         </section>
       </main>
-      {modal && <CrudModal module={modal.module} row={modal.row} onClose={() => setModal(null)} onSave={(values: Record<string, unknown>) => save(modal.module, values)} uploadFile={uploadFile} />}
+      {modal && <CrudModal module={modal.module} row={modal.row} onClose={() => setModal(null)} onSave={(values: Row) => save(modal.module, values)} uploadFile={uploadFile} />}
       {toast && <div className="fixed bottom-5 right-5 z-50 rounded-xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm font-bold text-[var(--brand)] shadow-2xl">{toast}</div>}
     </div>
   );
@@ -359,7 +360,7 @@ function ModuleView(props: ModuleViewProps) {
                   <tr>{showFields.map(field => <th key={field.key} className="px-4 py-3">{field.label}</th>)}<th className="px-4 py-3">Status</th><th className="px-4 py-3">Actions</th></tr>
                 </thead>
                 <tbody>
-                  {props.rows.map(row => <tr key={row.id} className="border-t border-white/10 transition hover:bg-white/[0.035]">
+                  {props.rows.map(row => <tr key={String(row.id)} className="border-t border-white/10 transition hover:bg-white/[0.035]">
                     {showFields.map((field, index) => <td key={field.key} className={`px-4 py-4 ${index === 0 ? "font-bold text-white" : "text-zinc-300"}`}>{renderCell(row[field.key], field)}</td>)}
                     <td className="px-4 py-4"><Badge>{String(row.status ?? row.contract_status ?? row.master_status ?? "Ready")}</Badge></td>
                     <td className="space-x-2 px-4 py-4">
@@ -388,7 +389,7 @@ type CrudModalProps = {
   module: ModuleConfig;
   row?: Row;
   onClose: () => void;
-  onSave: (values: Record<string, unknown>) => void;
+  onSave: (values: Row) => void;
   uploadFile: (bucket: string, file: File) => Promise<string>;
 };
 
@@ -397,28 +398,41 @@ function CrudModal({
   row,
   onClose,
   onSave,
-  uploadFile
+  uploadFile: _uploadFile
 }: CrudModalProps) {
-  const [values, setValues] = useState<Record<string, unknown>>(row ?? {});
-  const [uploading, setUploading] = useState("");
-
-  async function handleFile(field: Field, file: File) {
-    if (!field.bucket) return;
-    setUploading(field.key);
-    const url = await uploadFile(field.bucket, file);
-    if (url) setValues(prev => ({ ...prev, [field.key]: url }));
-    setUploading("");
-  }
+  const [values, setValues] = useState<Row>(row ?? {});
 
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
     <form onSubmit={event => { event.preventDefault(); onSave(values); }} className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-3xl border border-white/10 bg-[#0D1014]/95 p-5 shadow-2xl backdrop-blur-2xl">
       <div className="mb-5 flex items-center justify-between"><h3 className="text-xl font-black">{row ? "Edit" : "Create"} {module.label}</h3><button type="button" onClick={onClose} className={secondaryButton}>Cancel</button></div>
       <div className="grid gap-3 md:grid-cols-2">
-        {module.fields.map((field: Field) => <label key={field.key} className="block">
+        {(module.fields as Field[]).map((field: Field) => <label key={field.key} className="block">
           <span className="mb-1 block text-xs font-bold uppercase text-zinc-500">{field.label}</span>
           {field.type === "textarea" && <textarea className={controlClass} rows={3} value={String(values[field.key] ?? "")} onChange={event => setValues({ ...values, [field.key]: event.target.value })} />}
           {field.type === "select" && <select className={controlClass} value={String(values[field.key] ?? field.options?.[0] ?? "")} onChange={event => setValues({ ...values, [field.key]: event.target.value })}>{field.options?.map((option: string) => <option key={option} value={option}>{option}</option>)}</select>}
-          {field.type === "file" && <div className="rounded-xl border border-dashed border-white/15 bg-black/30 p-3"><input type="file" onChange={event => event.target.files?.[0] && handleFile(field, event.target.files[0])} /><p className="mt-2 truncate text-xs text-zinc-500">{uploading === field.key ? "Uploading..." : String(values[field.key] ?? "Drag/drop via picker or paste URL after upload")}</p>{values[field.key] && isImageUrl(String(values[field.key])) && <img alt="" src={String(values[field.key])} className="mt-3 h-28 rounded-xl object-cover" />}</div>}
+          {field.type === "file" && (
+            <div className="rounded-xl border border-dashed border-white/15 bg-black/30 p-3">
+              <input
+                className={controlClass}
+                type="file"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+
+                  setValues((prev) => ({
+                    ...prev,
+                    [field.key]: file.name
+                  }));
+                }}
+              />
+
+              {values[field.key] && (
+                <p className="mt-2 text-xs text-zinc-400">
+                  {String(values[field.key])}
+                </p>
+              )}
+            </div>
+          )}
           {!["textarea", "select", "file"].includes(field.type ?? "text") && <input className={controlClass} type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"} value={String(values[field.key] ?? "")} onChange={event => setValues({ ...values, [field.key]: field.type === "number" ? Number(event.target.value) : event.target.value })} />}
         </label>)}
       </div>
@@ -543,7 +557,7 @@ const tooltipStyle = { background: "#090b0f", border: "1px solid rgba(255,255,25
 type ChartRow = { name: string; [key: string]: string | number };
 type ChartData = Record<string, ChartRow[]>;
 
-function buildPayload(module: ModuleConfig, values: Record<string, unknown>, tenantId: string) {
+function buildPayload(module: ModuleConfig, values: Row, tenantId: string) {
   const payload: Record<string, unknown> = { tenant_id: tenantId };
   module.fields.forEach(field => {
     const value = values[field.key];
@@ -552,7 +566,7 @@ function buildPayload(module: ModuleConfig, values: Record<string, unknown>, ten
   return payload;
 }
 
-function renderCell(value: unknown, field: FieldConfig) {
+function renderCell(value: RowValue | undefined, field: FieldConfig) {
   if (!value) return "—";
   const text = String(value);
   if (field.type === "file" && isImageUrl(text)) return <img alt="" src={text} className="h-12 w-12 rounded-xl object-cover" />;
