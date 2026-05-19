@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: #060709;
+  color: #f5f5f5;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  text-rendering: geometricPrecision;
+}
+
+.grid-noise {
+  background-image:
+    linear-gradient(rgba(182, 255, 26, .03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47, 125, 255, .035) 1px, transparent 1px);
+  background-size: 42px 42px;
+}
+
+input,
+select,
+textarea {
+  color-scheme: dark;
+}
+
+::selection {
+  background: rgba(182, 255, 26, .28);
+}
+
+* {
+  scrollbar-color: rgba(255,255,255,.22) transparent;
+}
