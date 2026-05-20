@@ -19,6 +19,7 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import { AnimatePresence, motion } from "framer-motion";
 import { canWrite, modules, type FieldConfig, type ModuleConfig, type Role } from "@/lib/modules";
 import type { Membership, Profile, Workspace } from "@/lib/server-data";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -55,8 +56,8 @@ const premiumNav = [
   { key: "editorial", label: "Calendar", section: "Operations", icon: "□" },
   { key: "content", label: "Tasks", section: "Operations", icon: "✓" },
   { key: "artists", label: "Contacts", section: "Operations", icon: "◎" },
-  { key: "cleanup", label: "Storage", section: "Operations", icon: "⌫" },
-  { key: "settings", label: "Settings", section: "Operations", icon: "⚙" }
+  { key: "settings", label: "Settings", section: "Operations", icon: "⚙" },
+  { key: "cleanup", label: "Storage", section: "Operations", icon: "⌫" }
 ];
 
 export function DashboardApp({
@@ -78,6 +79,7 @@ export function DashboardApp({
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [modal, setModal] = useState<{ module: ModuleConfig; row?: Row } | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [workspaceWidgetOpen, setWorkspaceWidgetOpen] = useState(false);
   const [toast, setToast] = useState("");
   const role = membership.role;
   const activeModule = modules.find(module => module.key === active);
@@ -279,7 +281,7 @@ export function DashboardApp({
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_8%,rgba(139,92,246,.26),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(182,255,0,.12),transparent_22%),linear-gradient(135deg,rgba(8,14,31,.95),rgba(5,7,11,.95)_42%,rgba(13,8,24,.96))]" />
       <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(255,255,255,.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.025)_1px,transparent_1px)] bg-[size:48px_48px] opacity-30" />
 
-      <aside className="fixed bottom-0 left-0 top-0 z-30 hidden w-[284px] border-r border-white/[0.08] bg-[#070A10]/72 p-4 shadow-[28px_0_80px_rgba(0,0,0,.42)] backdrop-blur-2xl lg:block">
+      <aside className="fixed bottom-0 left-0 top-0 z-30 hidden w-[220px] border-r border-white/[0.08] bg-[#070A10]/72 p-3 shadow-[28px_0_80px_rgba(0,0,0,.42)] backdrop-blur-2xl lg:block">
         <div className="flex items-center gap-3 px-2 py-2">
           <Logo workspace={workspaceState} />
           <div className="min-w-0">
@@ -287,51 +289,60 @@ export function DashboardApp({
             <p className="truncate text-xs text-zinc-500">AI music operations</p>
           </div>
         </div>
-        <nav className="mt-7 space-y-5">
+        <nav className="mt-6 space-y-4">
           {["Core", "Business", "Operations"].map(section => (
             <div key={section}>
-              <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[0.28em] text-zinc-600">{section}</p>
+              <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[0.28em] text-zinc-600">{section.toUpperCase()}</p>
               <div className="space-y-1">
                 {premiumNav.filter(item => item.section === section).map(item => (
-                  <button key={`${section}-${item.label}`} onClick={() => navigate(item.key)} className={`group flex w-full items-center gap-3 rounded-[18px] px-3 py-2.5 text-left text-sm font-bold transition duration-200 ${active === item.key ? "border border-violet-300/20 bg-violet-500/15 text-white shadow-[0_0_28px_rgba(139,92,246,.18)]" : "text-zinc-500 hover:bg-white/[0.055] hover:text-zinc-100"}`}>
-                    <span className={`flex size-8 items-center justify-center rounded-2xl text-xs transition ${active === item.key ? "bg-violet-400 text-black" : "bg-white/[0.055] text-zinc-400 group-hover:text-lime-200"}`}>{item.icon}</span>
+                  <motion.button whileHover={{ x: 3 }} whileTap={{ scale: 0.98 }} key={`${section}-${item.label}`} onClick={() => navigate(item.key)} className={`group relative flex w-full items-center gap-2.5 rounded-[18px] px-2.5 py-2 text-left text-[13px] font-bold transition duration-200 ${active === item.key ? "border border-violet-300/25 bg-gradient-to-r from-violet-500/22 to-white/[0.04] text-white shadow-[0_0_34px_rgba(139,92,246,.2)]" : "text-zinc-500 hover:bg-white/[0.055] hover:text-zinc-100"}`}>
+                    {active === item.key && <span className="absolute -left-3 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-lime-300 shadow-[0_0_18px_rgba(182,255,0,.55)]" />}
+                    <span className={`flex size-7 shrink-0 items-center justify-center rounded-2xl text-xs transition ${active === item.key ? "bg-violet-400 text-black" : "bg-white/[0.055] text-zinc-400 group-hover:text-lime-200"}`}>{item.icon}</span>
                     <span className="truncate">{item.label}</span>
-                  </button>
+                  </motion.button>
                 ))}
               </div>
             </div>
           ))}
         </nav>
-        <div className="absolute bottom-4 left-4 right-4 rounded-[18px] border border-white/[0.08] bg-white/[0.055] p-4 shadow-2xl backdrop-blur-xl">
-          <div className="flex items-center gap-3">
+        <div className="absolute bottom-4 left-3">
+          <motion.button whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} onClick={() => setWorkspaceWidgetOpen(prev => !prev)} className="flex items-center gap-2 rounded-[18px] border border-white/[0.08] bg-white/[0.06] p-2 pr-3 shadow-2xl backdrop-blur-xl transition hover:border-lime-300/30">
             <Logo workspace={workspaceState} />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-black">{workspaceState.label_name}</p>
-              <p className="text-xs text-zinc-500">{role.toUpperCase()} · Pro workspace</p>
-            </div>
-          </div>
-          <div className="mt-4 space-y-3">
-            <ProgressLine label="Storage" value={64} />
-            <ProgressLine label="API credits" value={42} />
-          </div>
-          <button onClick={() => navigate("settings")} className="mt-4 w-full rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-xs font-black text-zinc-300 transition hover:border-violet-300/40 hover:text-white">Switch workspace</button>
+            <span className="max-w-[116px] truncate text-xs font-black">{workspaceState.label_name}</span>
+          </motion.button>
+          <AnimatePresence>
+            {workspaceWidgetOpen && (
+              <motion.div initial={{ opacity: 0, y: 10, scale: 0.94, filter: "blur(8px)" }} animate={{ opacity: 1, y: -8, scale: 1, filter: "blur(0px)" }} exit={{ opacity: 0, y: 10, scale: 0.96, filter: "blur(8px)" }} transition={{ duration: 0.18 }} className="absolute bottom-14 left-0 w-72 rounded-[22px] border border-white/[0.1] bg-[#080B12]/92 p-4 shadow-[0_30px_90px_rgba(0,0,0,.5)] backdrop-blur-2xl">
+                <div className="flex items-center gap-3">
+                  <Logo workspace={workspaceState} />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black">{workspaceState.label_name}</p>
+                    <p className="text-xs text-zinc-500">Pro workspace · {role.toUpperCase()}</p>
+                  </div>
+                  <span className="ml-auto rounded-full bg-lime-300/10 px-2 py-1 text-[10px] font-black text-lime-200">LIVE</span>
+                </div>
+                <div className="mt-4 space-y-3"><ProgressLine label="Storage usage" value={64} /><ProgressLine label="API credits" value={42} /></div>
+                <button onClick={() => { setWorkspaceWidgetOpen(false); navigate("settings"); }} className="mt-4 w-full rounded-[18px] border border-white/10 bg-white/[0.055] px-3 py-2 text-xs font-black text-zinc-300 transition hover:border-violet-300/40 hover:text-white">Switch workspace</button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </aside>
 
-      <main className="relative z-10 w-full lg:pl-[284px] xl:pr-[360px]">
-        <header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#05070B]/72 px-4 py-4 backdrop-blur-2xl md:px-7">
+      <main className="relative z-10 w-full lg:pl-[220px] xl:pr-[360px]">
+        <header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#05070B]/72 px-4 py-4 shadow-[0_18px_80px_rgba(0,0,0,.18)] backdrop-blur-2xl md:px-7">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.35em] text-violet-300/80">Label OS · Premium music intelligence</p>
               <h1 className="mt-1 text-2xl font-black tracking-tight md:text-4xl">{active === "master" ? "MASTER DASHBOARD" : systemModules.find(item => item.key === active)?.label}</h1>
             </div>
             <div className="flex flex-col gap-2 md:flex-row md:items-center">
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-2.5 text-zinc-500">⌕</span>
-                <input className="h-11 rounded-[18px] border border-white/[0.08] bg-white/[0.055] pl-9 pr-3 text-sm outline-none transition placeholder:text-zinc-600 focus:border-violet-300/50 focus:bg-white/[0.075] md:w-80" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search artists, demos, campaigns..." />
+              <div className="group relative">
+                <span className="pointer-events-none absolute left-3 top-2.5 text-zinc-500 transition group-focus-within:text-lime-200">⌕</span>
+                <input className="h-11 rounded-[18px] border border-white/[0.08] bg-white/[0.055] pl-9 pr-3 text-sm shadow-inner outline-none transition placeholder:text-zinc-600 focus:border-violet-300/60 focus:bg-white/[0.08] focus:shadow-[0_0_34px_rgba(139,92,246,.22)] md:w-96" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search artists, demos, campaigns..." />
               </div>
               <button onClick={() => notify("No new notifications")} className={iconButton}>!</button>
-              <button onClick={() => activeModule ? openCreate(activeModule.key) : openCreate("demos")} className="h-11 rounded-[18px] bg-lime-300 px-4 text-sm font-black text-black shadow-[0_0_32px_rgba(182,255,0,.18)] transition hover:-translate-y-0.5 hover:bg-lime-200">+ Create</button>
+              <motion.button whileHover={{ y: -2, scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => activeModule ? openCreate(activeModule.key) : openCreate("demos")} className="h-11 rounded-[18px] bg-lime-300 px-4 text-sm font-black text-black shadow-[0_0_32px_rgba(182,255,0,.18)] transition hover:bg-lime-200">+ Create</motion.button>
               <button onClick={() => setHelpOpen(true)} className={iconButton}>?</button>
               <form action="/auth/logout" method="post"><button className={iconButton}>{String(profile.email ?? "U").slice(0, 1).toUpperCase()}</button></form>
             </div>
@@ -665,7 +676,7 @@ function Stat({ label, value }: { label: string; value: ReactNode }) {
 }
 
 function KpiCard({ label, value, growth, data, dataKey }: { label: string; value: ReactNode; growth: string; data: ChartRow[]; dataKey: string }) {
-  return <div className="group overflow-hidden rounded-[18px] border border-white/[0.08] bg-white/[0.055] p-5 shadow-[0_24px_80px_rgba(0,0,0,.24)] backdrop-blur-2xl transition duration-300 hover:-translate-y-1 hover:border-lime-300/30 hover:shadow-[0_0_45px_rgba(139,92,246,.18)]">
+  return <motion.div whileHover={{ y: -6, scale: 1.015 }} transition={{ type: "spring", stiffness: 260, damping: 22 }} className="group overflow-hidden rounded-[18px] border border-white/[0.08] bg-[linear-gradient(145deg,rgba(255,255,255,.075),rgba(255,255,255,.028))] p-5 shadow-[0_24px_80px_rgba(0,0,0,.24)] backdrop-blur-2xl duration-300 hover:border-lime-300/30 hover:shadow-[0_0_55px_rgba(139,92,246,.22)]">
     <div className="flex items-start justify-between gap-3">
       <div><p className="text-sm text-zinc-500">{label}</p><p className="mt-2 text-3xl font-black tracking-tight">{value}</p></div>
       <span className="rounded-full border border-lime-300/20 bg-lime-300/10 px-2.5 py-1 text-xs font-black text-lime-200">{growth}</span>
@@ -673,7 +684,7 @@ function KpiCard({ label, value, growth, data, dataKey }: { label: string; value
     <div className="mt-4 h-14 opacity-80 transition group-hover:opacity-100">
       <ResponsiveContainer><LineChart data={data.length ? data : [{ name: "0", [dataKey]: 0 }, { name: "1", [dataKey]: 1 }]}><Line dataKey={dataKey} stroke="#B6FF00" strokeWidth={2.5} dot={false} /></LineChart></ResponsiveContainer>
     </div>
-  </div>;
+  </motion.div>;
 }
 
 function ProgressLine({ label, value }: { label: string; value: number }) {
@@ -686,7 +697,7 @@ function Segmented({ actions, onClick }: { actions: string[]; onClick: (message:
 
 function Insight({ title, text, tone }: { title: string; text: string; tone: "violet" | "lime" | "blue" }) {
   const colors = { violet: "from-violet-400/18", lime: "from-lime-300/16", blue: "from-blue-400/16" };
-  return <div className={`rounded-[18px] border border-white/[0.08] bg-gradient-to-br ${colors[tone]} to-white/[0.035] p-4 transition hover:-translate-y-0.5 hover:border-white/20`}><p className="text-sm font-black">{title}</p><p className="mt-2 text-sm leading-6 text-zinc-400">{text}</p></div>;
+  return <motion.div whileHover={{ y: -3, scale: 1.01 }} className={`rounded-[18px] border border-white/[0.08] bg-gradient-to-br ${colors[tone]} to-white/[0.035] p-4 transition hover:border-white/20`}><p className="text-sm font-black">{title}</p><p className="mt-2 text-sm leading-6 text-zinc-400">{text}</p></motion.div>;
 }
 
 function ArtistMini({ row }: { row: Row }) {
@@ -723,20 +734,20 @@ function AssistantPanel({ onNavigate, onCreate, notify }: { onNavigate: (key: st
     ["Create booking targets", () => { onNavigate("distribution"); notify("Booking target view opened"); }]
   ] as const;
   return <aside className="fixed bottom-5 right-5 top-24 z-20 hidden w-[332px] xl:block">
-    <div className="flex h-full flex-col rounded-[24px] border border-white/[0.08] bg-[#080B12]/78 p-4 shadow-[0_30px_100px_rgba(0,0,0,.42)] backdrop-blur-2xl">
+    <motion.div initial={{ opacity: 0, x: 22 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.28 }} className="flex h-full flex-col rounded-[24px] border border-white/[0.08] bg-[#080B12]/78 p-4 shadow-[0_30px_100px_rgba(0,0,0,.42)] backdrop-blur-2xl">
       <div className="rounded-[18px] border border-violet-300/20 bg-violet-400/10 p-4">
         <p className="text-xs font-black uppercase tracking-[0.28em] text-lime-200">AI Assistant</p>
         <h3 className="mt-2 text-xl font-black">Label intelligence</h3>
         <p className="mt-2 text-sm leading-6 text-zinc-400">Ask for pipeline summaries, release recommendations and campaign diagnostics.</p>
       </div>
       <div className="mt-4 space-y-2">
-        {actions.map(([label, action]) => <button key={label} onClick={action} className="w-full rounded-[18px] border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-left text-sm font-bold text-zinc-300 transition hover:-translate-y-0.5 hover:border-lime-300/30 hover:bg-white/[0.075] hover:text-white">{label}</button>)}
+        {actions.map(([label, action]) => <motion.button whileHover={{ x: 4, scale: 1.01 }} whileTap={{ scale: 0.98 }} key={label} onClick={action} className="w-full rounded-[18px] border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-left text-sm font-bold text-zinc-300 transition hover:border-lime-300/30 hover:bg-white/[0.075] hover:text-white">{label}</motion.button>)}
       </div>
       <div className="mt-auto rounded-[18px] border border-white/[0.08] bg-black/25 p-4">
         <p className="text-sm font-black">System health</p>
         <div className="mt-3 space-y-3"><ProgressLine label="RLS secure queries" value={98} /><ProgressLine label="Workspace sync" value={91} /></div>
       </div>
-    </div>
+    </motion.div>
   </aside>;
 }
 
@@ -745,7 +756,11 @@ function Badge({ children }: { children: ReactNode }) {
 }
 
 function Empty({ text }: { text: string }) {
-  return <div className="rounded-[18px] border border-dashed border-white/[0.12] bg-black/25 p-10 text-center text-sm text-zinc-400">{text}</div>;
+  return <div className="rounded-[18px] border border-dashed border-white/[0.12] bg-[linear-gradient(145deg,rgba(139,92,246,.08),rgba(0,0,0,.22))] p-10 text-center text-sm text-zinc-400">
+    <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-[18px] border border-violet-300/20 bg-violet-400/10 text-2xl text-lime-200">✦</div>
+    <p className="text-base font-black text-zinc-200">{text}</p>
+    <p className="mx-auto mt-2 max-w-sm text-xs leading-5 text-zinc-500">Create a new record or import CSV to populate this workspace module.</p>
+  </div>;
 }
 
 function Logo({ workspace, size = "md" }: { workspace: Workspace; size?: "md" | "lg" }) {
