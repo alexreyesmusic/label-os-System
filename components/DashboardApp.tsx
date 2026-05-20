@@ -42,6 +42,22 @@ const systemModules = [
   cleanupModule,
   { key: "settings", label: "Settings", icon: "⚙" }
 ];
+const premiumNav = [
+  { key: "master", label: "Dashboard", section: "Core", icon: "◆" },
+  { key: "tracks", label: "A&R Intelligence", section: "Core", icon: "◍" },
+  { key: "demos", label: "Demos", section: "Core", icon: "♪" },
+  { key: "artists", label: "Artists", section: "Core", icon: "◎" },
+  { key: "releases", label: "Releases", section: "Core", icon: "◈" },
+  { key: "revenue", label: "Revenue", section: "Business", icon: "€" },
+  { key: "campaigns", label: "Campaigns", section: "Business", icon: "✦" },
+  { key: "distribution", label: "Bookings", section: "Business", icon: "↗" },
+  { key: "reports", label: "Reports", section: "Business", icon: "□" },
+  { key: "editorial", label: "Calendar", section: "Operations", icon: "□" },
+  { key: "content", label: "Tasks", section: "Operations", icon: "✓" },
+  { key: "artists", label: "Contacts", section: "Operations", icon: "◎" },
+  { key: "cleanup", label: "Storage", section: "Operations", icon: "⌫" },
+  { key: "settings", label: "Settings", section: "Operations", icon: "⚙" }
+];
 
 export function DashboardApp({
   workspace,
@@ -246,52 +262,87 @@ export function DashboardApp({
   }, [currentRows, query, statusFilter, sortDir]);
   const stats = useMemo(() => computeStats(data), [data]);
   const chartData = useMemo(() => makeCharts(data), [data]);
+  const openCreate = (moduleKey: string) => {
+    const target = modules.find(module => module.key === moduleKey);
+    if (!target) return notify("Module unavailable");
+    setActive(target.key);
+    if (!canWrite(role, target)) return notify("Read only access");
+    setModal({ module: target });
+  };
+  const navigate = (key: string) => {
+    setActive(key);
+    setStatusFilter("All");
+  };
 
   return (
-    <div className="relative flex min-h-screen overflow-hidden bg-[#060709]" style={{ "--brand": workspaceState.brand_color, "--accent": "#2F7DFF" } as CSSProperties}>
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(182,255,26,.10),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(47,125,255,.12),transparent_30%)]" />
-      <aside className="fixed bottom-0 left-0 top-0 z-30 hidden w-72 border-r border-white/10 bg-black/55 p-4 shadow-2xl backdrop-blur-2xl lg:block">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
+    <div className="relative flex min-h-screen overflow-hidden bg-[#05070B] text-zinc-100" style={{ "--brand": "#8B5CF6", "--accent": "#B6FF00", "--workspace": workspaceState.brand_color } as CSSProperties}>
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_8%,rgba(139,92,246,.26),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(182,255,0,.12),transparent_22%),linear-gradient(135deg,rgba(8,14,31,.95),rgba(5,7,11,.95)_42%,rgba(13,8,24,.96))]" />
+      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(255,255,255,.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.025)_1px,transparent_1px)] bg-[size:48px_48px] opacity-30" />
+
+      <aside className="fixed bottom-0 left-0 top-0 z-30 hidden w-[284px] border-r border-white/[0.08] bg-[#070A10]/72 p-4 shadow-[28px_0_80px_rgba(0,0,0,.42)] backdrop-blur-2xl lg:block">
+        <div className="flex items-center gap-3 px-2 py-2">
+          <Logo workspace={workspaceState} />
+          <div className="min-w-0">
+            <p className="truncate text-[15px] font-black tracking-tight">Label OS</p>
+            <p className="truncate text-xs text-zinc-500">AI music operations</p>
+          </div>
+        </div>
+        <nav className="mt-7 space-y-5">
+          {["Core", "Business", "Operations"].map(section => (
+            <div key={section}>
+              <p className="mb-2 px-3 text-[10px] font-black uppercase tracking-[0.28em] text-zinc-600">{section}</p>
+              <div className="space-y-1">
+                {premiumNav.filter(item => item.section === section).map(item => (
+                  <button key={`${section}-${item.label}`} onClick={() => navigate(item.key)} className={`group flex w-full items-center gap-3 rounded-[18px] px-3 py-2.5 text-left text-sm font-bold transition duration-200 ${active === item.key ? "border border-violet-300/20 bg-violet-500/15 text-white shadow-[0_0_28px_rgba(139,92,246,.18)]" : "text-zinc-500 hover:bg-white/[0.055] hover:text-zinc-100"}`}>
+                    <span className={`flex size-8 items-center justify-center rounded-2xl text-xs transition ${active === item.key ? "bg-violet-400 text-black" : "bg-white/[0.055] text-zinc-400 group-hover:text-lime-200"}`}>{item.icon}</span>
+                    <span className="truncate">{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
+        <div className="absolute bottom-4 left-4 right-4 rounded-[18px] border border-white/[0.08] bg-white/[0.055] p-4 shadow-2xl backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <Logo workspace={workspaceState} />
             <div className="min-w-0">
-              <p className="truncate text-sm font-black">Label OS</p>
-              <p className="truncate text-xs text-zinc-500">{workspaceState.label_name}</p>
+              <p className="truncate text-sm font-black">{workspaceState.label_name}</p>
+              <p className="text-xs text-zinc-500">{role.toUpperCase()} · Pro workspace</p>
             </div>
           </div>
-          <p className="mt-4 rounded-xl border border-white/10 bg-black/35 p-3 text-xs text-zinc-400">{role.toUpperCase()} access · {workspaceState.currency}</p>
+          <div className="mt-4 space-y-3">
+            <ProgressLine label="Storage" value={64} />
+            <ProgressLine label="API credits" value={42} />
+          </div>
+          <button onClick={() => navigate("settings")} className="mt-4 w-full rounded-2xl border border-white/10 bg-black/30 px-3 py-2 text-xs font-black text-zinc-300 transition hover:border-violet-300/40 hover:text-white">Switch workspace</button>
         </div>
-        <nav className="mt-5 space-y-1">
-          {systemModules.map(item => (
-            <button key={item.key} onClick={() => { setActive(item.key); setStatusFilter("All"); }} className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition ${active === item.key ? "bg-white text-black" : "text-zinc-400 hover:bg-white/[0.06] hover:text-white"}`}>
-              <span className={`flex size-7 items-center justify-center rounded-lg text-xs ${active === item.key ? "bg-black text-[var(--brand)]" : "bg-white/[0.06]"}`}>{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
-        </nav>
       </aside>
 
-      <main className="relative z-10 w-full lg:pl-72">
-        <header className="sticky top-0 z-20 border-b border-white/10 bg-[#060709]/75 px-4 py-4 backdrop-blur-2xl md:px-7">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      <main className="relative z-10 w-full lg:pl-[284px] xl:pr-[360px]">
+        <header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#05070B]/72 px-4 py-4 backdrop-blur-2xl md:px-7">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.25em] text-zinc-500">Label OS · Persistent workspace</p>
-              <h1 className="mt-1 text-2xl font-black tracking-tight md:text-3xl">{active === "master" ? "MASTER DASHBOARD" : systemModules.find(item => item.key === active)?.label}</h1>
+              <p className="text-[11px] font-black uppercase tracking-[0.35em] text-violet-300/80">Label OS · Premium music intelligence</p>
+              <h1 className="mt-1 text-2xl font-black tracking-tight md:text-4xl">{active === "master" ? "MASTER DASHBOARD" : systemModules.find(item => item.key === active)?.label}</h1>
             </div>
-            <div className="flex flex-col gap-2 md:flex-row">
-              <input className="rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-sm outline-none transition focus:border-[var(--brand)] md:w-72" value={query} onChange={event => setQuery(event.target.value)} placeholder="Global search..." />
-              <button onClick={() => setHelpOpen(true)} className={secondaryButton}>Help / How it works</button>
-              <button onClick={() => exportCSV(activeModule)} className={secondaryButton}>Export CSV</button>
-              <form action="/auth/logout" method="post"><button className={secondaryButton}>Logout</button></form>
+            <div className="flex flex-col gap-2 md:flex-row md:items-center">
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-2.5 text-zinc-500">⌕</span>
+                <input className="h-11 rounded-[18px] border border-white/[0.08] bg-white/[0.055] pl-9 pr-3 text-sm outline-none transition placeholder:text-zinc-600 focus:border-violet-300/50 focus:bg-white/[0.075] md:w-80" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search artists, demos, campaigns..." />
+              </div>
+              <button onClick={() => notify("No new notifications")} className={iconButton}>!</button>
+              <button onClick={() => activeModule ? openCreate(activeModule.key) : openCreate("demos")} className="h-11 rounded-[18px] bg-lime-300 px-4 text-sm font-black text-black shadow-[0_0_32px_rgba(182,255,0,.18)] transition hover:-translate-y-0.5 hover:bg-lime-200">+ Create</button>
+              <button onClick={() => setHelpOpen(true)} className={iconButton}>?</button>
+              <form action="/auth/logout" method="post"><button className={iconButton}>{String(profile.email ?? "U").slice(0, 1).toUpperCase()}</button></form>
             </div>
           </div>
-          <div className="mt-3 flex gap-2 overflow-x-auto lg:hidden">
-            {systemModules.map(item => <button key={item.key} onClick={() => setActive(item.key)} className={`whitespace-nowrap rounded-xl px-3 py-2 text-sm font-bold ${active === item.key ? "bg-white text-black" : "bg-white/[0.045] text-zinc-300"}`}>{item.label}</button>)}
+          <div className="mt-4 flex gap-2 overflow-x-auto lg:hidden">
+            {premiumNav.map(item => <button key={`${item.section}-mobile-${item.label}`} onClick={() => navigate(item.key)} className={`whitespace-nowrap rounded-2xl px-3 py-2 text-sm font-bold ${active === item.key ? "bg-violet-400 text-black" : "bg-white/[0.055] text-zinc-300"}`}>{item.label}</button>)}
           </div>
         </header>
 
         <section className="space-y-6 p-4 md:p-7">
-          {active === "master" && <Master stats={stats} chartData={chartData} rowsByTable={data} />}
+          {active === "master" && <Master stats={stats} chartData={chartData} rowsByTable={data} onNavigate={navigate} onCreate={openCreate} notify={notify} />}
           {active === "cleanup" && <Cleanup data={data} removeCategory={clearCategory} />}
           {active === "settings" && <Settings workspace={workspaceState} profile={profile} onSave={saveWorkspace} exportCSV={() => exportCSV()} />}
           {activeModule && (
@@ -317,37 +368,108 @@ export function DashboardApp({
           )}
         </section>
       </main>
+      <AssistantPanel onNavigate={navigate} onCreate={openCreate} notify={notify} />
       {modal && <CrudModal module={modal.module} row={modal.row} onClose={() => setModal(null)} onSave={(values: Row) => save(modal.module, values)} />}
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
-      {toast && <div className="fixed bottom-5 right-5 z-50 rounded-xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm font-bold text-[var(--brand)] shadow-2xl">{toast}</div>}
+      {toast && <div className="fixed bottom-5 right-5 z-50 rounded-[18px] border border-violet-300/20 bg-zinc-950/95 px-4 py-3 text-sm font-bold text-lime-200 shadow-[0_0_40px_rgba(139,92,246,.28)] backdrop-blur-xl">{toast}</div>}
     </div>
   );
 }
 
-function Master({ stats, chartData, rowsByTable }: { stats: Record<string, number>; chartData: ChartData; rowsByTable: RowsByTable }) {
+function Master({
+  stats,
+  chartData,
+  rowsByTable,
+  onNavigate,
+  onCreate,
+  notify
+}: {
+  stats: Record<string, number>;
+  chartData: ChartData;
+  rowsByTable: RowsByTable;
+  onNavigate: (key: string) => void;
+  onCreate: (key: string) => void;
+  notify: (message: string) => void;
+}) {
+  const pipeline = [
+    { title: "High Fit", rows: (rowsByTable.demos ?? []).filter(row => ["High", "Perfect"].includes(String(row.label_fit ?? ""))).slice(0, 3) },
+    { title: "Medium Fit", rows: (rowsByTable.demos ?? []).filter(row => String(row.label_fit ?? "") === "Medium").slice(0, 3) },
+    { title: "Low Fit", rows: (rowsByTable.demos ?? []).filter(row => String(row.label_fit ?? "") === "Low").slice(0, 3) }
+  ];
+  const topTracks = [...(rowsByTable.revenue_records ?? [])].sort((a, b) => Number(b.gross_revenue ?? 0) - Number(a.gross_revenue ?? 0)).slice(0, 5);
+  const upcoming = [...(rowsByTable.releases ?? [])].filter(row => String(row.status ?? "") !== "Published").slice(0, 5);
   return (
     <>
-      <div className="rounded-3xl border border-white/10 bg-white/[0.045] p-6 shadow-2xl backdrop-blur-2xl">
-        <p className="text-xs font-black uppercase tracking-[0.3em] text-[var(--brand)]">Label OS</p>
-        <h2 className="mt-3 text-5xl font-black tracking-tight">MASTER DASHBOARD</h2>
-        <p className="mt-3 max-w-2xl text-zinc-400">Manage your label workspace with persistent Supabase data protected by Row Level Security.</p>
+      <div className="relative overflow-hidden rounded-[28px] border border-white/[0.08] bg-white/[0.055] p-6 shadow-[0_30px_100px_rgba(0,0,0,.38)] backdrop-blur-2xl">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_10%_10%,rgba(139,92,246,.32),transparent_32%),radial-gradient(circle_at_85%_20%,rgba(182,255,0,.15),transparent_26%)]" />
+        <div className="relative grid gap-6 xl:grid-cols-[1.2fr_.8fr] xl:items-end">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.35em] text-lime-200">AI Music SaaS Workspace</p>
+            <h2 className="mt-4 max-w-4xl text-5xl font-black tracking-tight md:text-7xl">MASTER DASHBOARD</h2>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-400">Real-time label intelligence across demos, releases, revenue, campaigns, content and distribution.</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {[
+              ["Upload Demo", "demos"],
+              ["New Release", "releases"],
+              ["Campaign", "campaigns"],
+              ["Add Artist", "artists"]
+            ].map(([label, key]) => <button key={label} onClick={() => onCreate(key)} className="rounded-[18px] border border-white/[0.08] bg-black/30 px-4 py-3 text-left text-sm font-black transition hover:-translate-y-0.5 hover:border-lime-300/40 hover:bg-lime-300 hover:text-black">{label}</button>)}
+          </div>
+        </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <Stat label="Demos" value={stats.demos} />
-        <Stat label="Tracks" value={stats.tracks} />
-        <Stat label="Releases" value={stats.releases} />
-        <Stat label="Revenue" value={money(stats.revenue)} />
-        <Stat label="Pending Royalties" value={money(stats.pendingRoyalties)} />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard label="Total Revenue" value={money(stats.revenue)} growth="+18.4%" data={chartData.monthlyRevenue} dataKey="revenue" />
+        <KpiCard label="Active Releases" value={stats.releases} growth="+6.1%" data={chartData.releaseTimeline} dataKey={metricKey(chartData.releaseTimeline)} />
+        <KpiCard label="New Demos" value={stats.demos} growth="+24.7%" data={chartData.demosByMonth} dataKey="count" />
+        <KpiCard label="Active Artists" value={stats.artists} growth="+9.2%" data={chartData.artistCountries} dataKey="value" />
       </div>
-      <div className="grid gap-5 xl:grid-cols-2">
-        <ChartPanel title="Revenue mensual"><AreaGraph data={chartData.monthlyRevenue} dataKey="revenue" /></ChartPanel>
-        <ChartPanel title="Releases por estado"><PieGraph data={chartData.releaseStatus} /></ChartPanel>
-        <ChartPanel title="Demos recibidos por mes"><BarGraph data={chartData.demosByMonth} dataKey="count" /></ChartPanel>
-        <ChartPanel title="Campaign performance"><LineGraph data={chartData.campaignPerformance} /></ChartPanel>
-        <ChartPanel title="Top artists by revenue"><BarGraph data={chartData.topArtists} dataKey="revenue" /></ChartPanel>
-        <ChartPanel title="Content production pipeline"><PieGraph data={chartData.contentPipeline} /></ChartPanel>
+      <div className="grid gap-5 2xl:grid-cols-[1.5fr_.8fr]">
+        <ChartPanel title="Revenue Overview" action={<Segmented actions={["30 days", "3 months", "12 months"]} onClick={notify} />}><AreaGraph data={chartData.monthlyRevenue} dataKey="revenue" /></ChartPanel>
+        <ChartPanel title="Revenue Sources"><PieGraph data={chartData.revenueByPlatform} /></ChartPanel>
       </div>
-      <Panel title="Recent activity">
+      <div className="grid gap-5 2xl:grid-cols-[.9fr_1.1fr]">
+        <Panel title="AI Insights">
+          <div className="grid gap-3 md:grid-cols-3 2xl:grid-cols-1">
+            <Insight title="Emerging Artist Alert" text="K4NE showing growth in Spain and Germany." tone="violet" />
+            <Insight title="Genre Trends" text="Melodic Techno +28% across recent campaign engagement." tone="lime" />
+            <Insight title="Opportunity Detection" text="Track gaining playlist momentum before release week." tone="blue" />
+          </div>
+        </Panel>
+        <Panel title="A&R Pipeline">
+          <div className="grid gap-3 md:grid-cols-3">
+            {pipeline.map(column => <div key={column.title} className="rounded-[18px] border border-white/[0.08] bg-black/25 p-3">
+              <p className="mb-3 text-xs font-black uppercase tracking-[0.22em] text-zinc-500">{column.title}</p>
+              <div className="space-y-2">
+                {column.rows.length ? column.rows.map(row => <ArtistMini key={String(row.id ?? row.track_title)} row={row} />) : <p className="rounded-2xl border border-dashed border-white/[0.08] p-3 text-xs text-zinc-500">No artists here yet</p>}
+              </div>
+            </div>)}
+          </div>
+        </Panel>
+      </div>
+      <div className="grid gap-5 2xl:grid-cols-3">
+        <Panel title="Upcoming Releases">
+          <div className="space-y-3">
+            {upcoming.length ? upcoming.map(row => <ReleaseMini key={String(row.id ?? row.title)} row={row} />) : <Empty text="No upcoming releases." />}
+          </div>
+        </Panel>
+        <Panel title="Top Performing Tracks">
+          <div className="space-y-2">
+            {topTracks.length ? topTracks.map(row => <TrackRow key={String(row.id ?? row.release_title)} row={row} />) : <Empty text="No revenue data yet." />}
+          </div>
+        </Panel>
+        <Panel title="Top Countries">
+          <div className="space-y-3">
+            {[["Germany", "34%", "+14%"], ["Spain", "27%", "+21%"], ["United States", "18%", "+8%"]].map(([country, value, growth]) => (
+              <div key={country} className="flex items-center justify-between rounded-[18px] border border-white/[0.08] bg-black/25 p-3">
+                <span className="font-bold">{country}</span>
+                <span className="text-sm text-zinc-400">{value} <b className="text-lime-200">{growth}</b></span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+      <Panel title="Activity Feed" action={<button onClick={() => onNavigate("reports")} className={secondaryButton}>Open reports</button>}>
         <div className="grid gap-2 md:grid-cols-2">
           {recentActivity(rowsByTable).map(item => <Activity key={item} text={item} />)}
         </div>
@@ -531,28 +653,104 @@ function ModuleCharts({ moduleKey, chartData }: { moduleKey: string; chartData: 
 }
 
 function Panel({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
-  return <section className="rounded-3xl border border-white/10 bg-white/[0.045] p-5 shadow-2xl backdrop-blur-2xl"><div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><h2 className="text-lg font-black tracking-tight">{title}</h2>{action}</div>{children}</section>;
+  return <section className="rounded-[18px] border border-white/[0.08] bg-white/[0.055] p-5 shadow-[0_24px_80px_rgba(0,0,0,.28)] backdrop-blur-2xl transition duration-300 hover:border-violet-300/20 hover:bg-white/[0.07]"><div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><h2 className="text-lg font-black tracking-tight">{title}</h2>{action}</div>{children}</section>;
 }
 
-function ChartPanel({ title, children }: { title: string; children: ReactNode }) {
-  return <Panel title={title}>{children}</Panel>;
+function ChartPanel({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+  return <Panel title={title} action={action}>{children}</Panel>;
 }
 
 function Stat({ label, value }: { label: string; value: ReactNode }) {
-  return <div className="rounded-3xl border border-white/10 bg-white/[0.045] p-5 shadow-xl backdrop-blur-xl"><p className="text-sm text-zinc-500">{label}</p><p className="mt-3 text-3xl font-black tracking-tight">{value}</p></div>;
+  return <div className="rounded-[18px] border border-white/[0.08] bg-white/[0.055] p-5 shadow-xl backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-violet-300/30"><p className="text-sm text-zinc-500">{label}</p><p className="mt-3 text-3xl font-black tracking-tight">{value}</p></div>;
+}
+
+function KpiCard({ label, value, growth, data, dataKey }: { label: string; value: ReactNode; growth: string; data: ChartRow[]; dataKey: string }) {
+  return <div className="group overflow-hidden rounded-[18px] border border-white/[0.08] bg-white/[0.055] p-5 shadow-[0_24px_80px_rgba(0,0,0,.24)] backdrop-blur-2xl transition duration-300 hover:-translate-y-1 hover:border-lime-300/30 hover:shadow-[0_0_45px_rgba(139,92,246,.18)]">
+    <div className="flex items-start justify-between gap-3">
+      <div><p className="text-sm text-zinc-500">{label}</p><p className="mt-2 text-3xl font-black tracking-tight">{value}</p></div>
+      <span className="rounded-full border border-lime-300/20 bg-lime-300/10 px-2.5 py-1 text-xs font-black text-lime-200">{growth}</span>
+    </div>
+    <div className="mt-4 h-14 opacity-80 transition group-hover:opacity-100">
+      <ResponsiveContainer><LineChart data={data.length ? data : [{ name: "0", [dataKey]: 0 }, { name: "1", [dataKey]: 1 }]}><Line dataKey={dataKey} stroke="#B6FF00" strokeWidth={2.5} dot={false} /></LineChart></ResponsiveContainer>
+    </div>
+  </div>;
+}
+
+function ProgressLine({ label, value }: { label: string; value: number }) {
+  return <div><div className="mb-1 flex justify-between text-[11px] font-bold text-zinc-500"><span>{label}</span><span>{value}%</span></div><div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]"><div className="h-full rounded-full bg-gradient-to-r from-violet-400 to-lime-300" style={{ width: `${value}%` }} /></div></div>;
+}
+
+function Segmented({ actions, onClick }: { actions: string[]; onClick: (message: string) => void }) {
+  return <div className="flex rounded-[18px] border border-white/[0.08] bg-black/25 p-1">{actions.map(action => <button key={action} onClick={() => onClick(`Range changed to ${action}`)} className="rounded-2xl px-3 py-1.5 text-xs font-black text-zinc-400 transition hover:bg-white/[0.08] hover:text-white">{action}</button>)}</div>;
+}
+
+function Insight({ title, text, tone }: { title: string; text: string; tone: "violet" | "lime" | "blue" }) {
+  const colors = { violet: "from-violet-400/18", lime: "from-lime-300/16", blue: "from-blue-400/16" };
+  return <div className={`rounded-[18px] border border-white/[0.08] bg-gradient-to-br ${colors[tone]} to-white/[0.035] p-4 transition hover:-translate-y-0.5 hover:border-white/20`}><p className="text-sm font-black">{title}</p><p className="mt-2 text-sm leading-6 text-zinc-400">{text}</p></div>;
+}
+
+function ArtistMini({ row }: { row: Row }) {
+  const name = String(row.artist_name ?? row.name ?? "Unknown Artist");
+  return <div className="flex items-center gap-3 rounded-[18px] border border-white/[0.08] bg-white/[0.04] p-3">
+    <div className="flex size-10 items-center justify-center rounded-2xl bg-violet-400/20 text-xs font-black text-violet-100">{name.slice(0, 2).toUpperCase()}</div>
+    <div className="min-w-0"><p className="truncate text-sm font-black">{name}</p><p className="truncate text-xs text-zinc-500">{String(row.track_title ?? "Untitled track")} · {String(row.label_fit ?? "Fit")}</p></div>
+  </div>;
+}
+
+function ReleaseMini({ row }: { row: Row }) {
+  return <div className="flex items-center gap-3 rounded-[18px] border border-white/[0.08] bg-black/25 p-3">
+    <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-400 to-lime-300" />
+    <div className="min-w-0 flex-1"><p className="truncate text-sm font-black">{String(row.title ?? "Untitled release")}</p><p className="truncate text-xs text-zinc-500">{String(row.artist_name ?? "Artist")} · {String(row.release_date ?? "TBD")}</p></div>
+    <Badge>{String(row.status ?? "Draft")}</Badge>
+  </div>;
+}
+
+function TrackRow({ row }: { row: Row }) {
+  const revenue = Number(row.gross_revenue ?? 0);
+  return <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-[18px] border border-white/[0.08] bg-black/25 p-3 text-sm">
+    <span className="min-w-0 truncate font-black">{String(row.release_title ?? "Track")}</span>
+    <span className="text-zinc-400">{Math.max(1000, Math.round(revenue * 12)).toLocaleString()} streams</span>
+    <span className="text-lime-200">{money(revenue)}</span>
+  </div>;
+}
+
+function AssistantPanel({ onNavigate, onCreate, notify }: { onNavigate: (key: string) => void; onCreate: (key: string) => void; notify: (message: string) => void }) {
+  const actions = [
+    ["Show trending artists", () => onNavigate("artists")],
+    ["Generate weekly report", () => onCreate("reports")],
+    ["Recommend next release", () => onNavigate("releases")],
+    ["Detect underperforming campaigns", () => onNavigate("campaigns")],
+    ["Create booking targets", () => { onNavigate("distribution"); notify("Booking target view opened"); }]
+  ] as const;
+  return <aside className="fixed bottom-5 right-5 top-24 z-20 hidden w-[332px] xl:block">
+    <div className="flex h-full flex-col rounded-[24px] border border-white/[0.08] bg-[#080B12]/78 p-4 shadow-[0_30px_100px_rgba(0,0,0,.42)] backdrop-blur-2xl">
+      <div className="rounded-[18px] border border-violet-300/20 bg-violet-400/10 p-4">
+        <p className="text-xs font-black uppercase tracking-[0.28em] text-lime-200">AI Assistant</p>
+        <h3 className="mt-2 text-xl font-black">Label intelligence</h3>
+        <p className="mt-2 text-sm leading-6 text-zinc-400">Ask for pipeline summaries, release recommendations and campaign diagnostics.</p>
+      </div>
+      <div className="mt-4 space-y-2">
+        {actions.map(([label, action]) => <button key={label} onClick={action} className="w-full rounded-[18px] border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-left text-sm font-bold text-zinc-300 transition hover:-translate-y-0.5 hover:border-lime-300/30 hover:bg-white/[0.075] hover:text-white">{label}</button>)}
+      </div>
+      <div className="mt-auto rounded-[18px] border border-white/[0.08] bg-black/25 p-4">
+        <p className="text-sm font-black">System health</p>
+        <div className="mt-3 space-y-3"><ProgressLine label="RLS secure queries" value={98} /><ProgressLine label="Workspace sync" value={91} /></div>
+      </div>
+    </div>
+  </aside>;
 }
 
 function Badge({ children }: { children: ReactNode }) {
-  return <span className="inline-flex rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-[var(--brand)]">{children}</span>;
+  return <span className="inline-flex rounded-full border border-violet-300/20 bg-violet-400/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-lime-200 shadow-[0_0_20px_rgba(139,92,246,.18)]">{children}</span>;
 }
 
 function Empty({ text }: { text: string }) {
-  return <div className="rounded-3xl border border-dashed border-white/15 bg-black/25 p-10 text-center text-sm text-zinc-400">{text}</div>;
+  return <div className="rounded-[18px] border border-dashed border-white/[0.12] bg-black/25 p-10 text-center text-sm text-zinc-400">{text}</div>;
 }
 
 function Logo({ workspace, size = "md" }: { workspace: Workspace; size?: "md" | "lg" }) {
   const cls = size === "lg" ? "size-20 text-2xl" : "size-11";
-  return <div className={`${cls} flex items-center justify-center rounded-2xl font-black text-black`} style={{ background: workspace.brand_color }}>{workspace.label_name.slice(0, 2).toUpperCase()}</div>;
+  return <div className={`${cls} flex items-center justify-center rounded-[18px] bg-gradient-to-br from-lime-200 to-violet-400 font-black text-black shadow-[0_0_30px_rgba(139,92,246,.28)]`} style={{ boxShadow: `0 0 34px ${workspace.brand_color}44` }}>{workspace.label_name.slice(0, 2).toUpperCase()}</div>;
 }
 
 function Input({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
@@ -579,8 +777,9 @@ function Activity({ text }: { text: string }) {
   return <div className="flex gap-3 rounded-2xl border border-white/10 bg-black/25 p-3"><span className="mt-1 size-2 rounded-full bg-[var(--brand)]" /><div><p className="text-sm font-semibold">{text}</p><p className="text-xs text-zinc-500">Workspace activity</p></div></div>;
 }
 
-const controlClass = "w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm outline-none transition focus:border-[var(--brand)]";
-const secondaryButton = "rounded-lg border border-white/10 bg-white/[0.045] px-3 py-2 font-bold transition hover:bg-white/[0.08]";
+const controlClass = "w-full rounded-[18px] border border-white/[0.08] bg-black/35 px-3 py-2 text-sm outline-none transition focus:border-violet-300/50 focus:bg-white/[0.06]";
+const secondaryButton = "rounded-[18px] border border-white/[0.08] bg-white/[0.055] px-3 py-2 font-bold transition hover:-translate-y-0.5 hover:border-violet-300/30 hover:bg-white/[0.09]";
+const iconButton = "flex size-11 items-center justify-center rounded-[18px] border border-white/[0.08] bg-white/[0.055] text-sm font-black text-zinc-300 transition hover:-translate-y-0.5 hover:border-violet-300/35 hover:text-white";
 const tooltipStyle = { background: "#090b0f", border: "1px solid rgba(255,255,255,.1)", borderRadius: 12, color: "#fff" };
 type ChartRow = { name: string; [key: string]: string | number };
 type ChartData = Record<string, ChartRow[]>;
@@ -642,6 +841,7 @@ function computeStats(rows: RowsByTable) {
   return {
     demos: rows.demos?.length ?? 0,
     tracks: rows.tracks?.length ?? 0,
+    artists: rows.artists?.length ?? 0,
     releases: rows.releases?.length ?? 0,
     revenue: revenue.reduce((sum, row) => sum + Number(row.gross_revenue ?? 0), 0),
     pendingRoyalties: splits.filter(row => String(row.status ?? "").toLowerCase() !== "paid").reduce((sum, row) => sum + Number(row.percentage ?? 0), 0)
