@@ -21,7 +21,7 @@ import {
 } from "recharts";
 import { canWrite, modules, type FieldConfig, type ModuleConfig, type Role } from "@/lib/modules";
 import type { Membership, Profile, Workspace } from "@/lib/server-data";
-import { createClient } from "@/lib/supabase/browser";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 type RowValue = string | number | boolean | null;
 type Row = Record<string, RowValue>;
@@ -35,6 +35,7 @@ type Field = {
 
 const cleanupModule = { key: "cleanup", label: "Data Cleanup", icon: "⌫" };
 const helpModule = { key: "help", label: "Help / How it works", icon: "?" };
+const supabase = getSupabaseBrowserClient();
 const systemModules = [
   { key: "master", label: "Master Dashboard", icon: "◆" },
   ...modules.map(module => ({ key: module.key, label: module.label, icon: module.icon })),
@@ -53,7 +54,6 @@ export function DashboardApp({
   membership: Membership;
   initialRows: RowsByTable;
 }) {
-  const supabase = createClient();
   const [workspaceState, setWorkspaceState] = useState<Workspace>(workspace);
   const [data, setData] = useState<RowsByTable>(initialRows);
   const [active, setActive] = useState("master");
@@ -65,24 +65,40 @@ export function DashboardApp({
   const [toast, setToast] = useState("");
   const role = membership.role;
   const activeModule = modules.find(module => module.key === active);
+  const activeWorkspaceId = membership.workspace_id || workspaceState.id;
 
   function notify(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 2400);
   }
 
+  async function getSessionOrRedirect() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      notify("Please login again");
+      window.location.href = "/login";
+      return null;
+    }
+    return session;
+  }
+
   async function refresh(table: string) {
-    const { data: rows, error } = await supabase.from(table).select("*").eq("workspace_id", workspaceState.id).order("created_at", { ascending: false });
+    const { data: rows, error } = await supabase.from(table).select("*").eq("workspace_id", activeWorkspaceId).order("created_at", { ascending: false });
     if (error) return notify(error.message);
     setData(prev => ({ ...prev, [table]: (rows ?? []) as Row[] }));
   }
 
   async function save(module: ModuleConfig, values: Row) {
+    const session = await getSessionOrRedirect();
+    if (!session) return;
+    if (!activeWorkspaceId) return notify("Missing workspace");
     const existingId = String(values.id ?? "");
-    const payload = { ...buildPayload(module, values), workspace_id: workspaceState.id };
+    const payload = { ...buildPayload(module, values), workspace_id: activeWorkspaceId };
+    const insertPayload = { ...payload, created_by: session.user.id };
+    if (!existingId && module.table === "demos") console.log("DEMO INSERT PAYLOAD", insertPayload);
     const request = existingId
       ? supabase.from(module.table).update(payload).eq("id", existingId)
-      : supabase.from(module.table).insert(payload);
+      : supabase.from(module.table).insert(insertPayload);
 
     const { error } = await request;
     if (error) return notify(error.message);
@@ -93,6 +109,8 @@ export function DashboardApp({
 
   async function remove(module: ModuleConfig, row: Row) {
     if (!confirm("Delete this item? This action cannot be undone.")) return;
+    const session = await getSessionOrRedirect();
+    if (!session) return;
     const { error } = await supabase.from(module.table).delete().eq("id", String(row.id));
     if (error) return notify(error.message);
     await refresh(module.table);
@@ -100,8 +118,10 @@ export function DashboardApp({
   }
 
   async function duplicate(module: ModuleConfig, row: Row) {
+    const session = await getSessionOrRedirect();
+    if (!session) return;
     const copy = Object.fromEntries(Object.entries(row).filter(([key]) => !["id", "created_at", "updated_at", "created_by"].includes(key))) as Row;
-    const { error } = await supabase.from(module.table).insert({ ...copy, workspace_id: workspaceState.id });
+    const { error } = await supabase.from(module.table).insert({ ...copy, workspace_id: workspaceState.id, created_by: session.user.id });
     if (error) return notify(error.message);
     await refresh(module.table);
     notify("Item duplicated");
@@ -118,9 +138,12 @@ export function DashboardApp({
   }
 
   async function convertToRelease(module: ModuleConfig, row: Row) {
+    const session = await getSessionOrRedirect();
+    if (!session) return;
     const title = String(row.track_title ?? row.title ?? "Untitled Release");
     const release: Row = {
       workspace_id: workspaceState.id,
+      created_by: session.user.id,
       title,
       artist_name: String(row.artist_name ?? ""),
       cover_url: String(row.cover_url ?? row.artwork_link ?? ""),
@@ -144,6 +167,8 @@ export function DashboardApp({
   }
 
   async function updateRow(table: string, row: Row, patch: Row) {
+    const session = await getSessionOrRedirect();
+    if (!session) return;
     const { error } = await supabase.from(table).update(patch).eq("id", String(row.id));
     if (error) return notify(error.message);
     await refresh(table);
@@ -163,6 +188,8 @@ export function DashboardApp({
   }
 
   async function importCSV(module: ModuleConfig, file: File) {
+    const session = await getSessionOrRedirect();
+    if (!session) return;
     const text = await file.text();
     const [headerLine, ...lines] = text.split(/\r?\n/).filter(Boolean);
     if (!headerLine) return notify("CSV is empty");
@@ -172,7 +199,7 @@ export function DashboardApp({
       return headers.reduce<Row>((acc, key, index) => {
         acc[key] = values[index] ?? "";
         return acc;
-      }, { workspace_id: workspaceState.id });
+      }, { workspace_id: workspaceState.id, created_by: session.user.id });
     });
     const { error } = await supabase.from(module.table).insert(records);
     if (error) return notify(error.message);
@@ -182,6 +209,8 @@ export function DashboardApp({
 
   async function clearCategory(table: string) {
     if (!confirm(`Delete all records from ${table}?`)) return;
+    const session = await getSessionOrRedirect();
+    if (!session) return;
     const { error } = await supabase.from(table).delete().eq("workspace_id", workspaceState.id);
     if (error) return notify(error.message);
     await refresh(table);
@@ -189,6 +218,8 @@ export function DashboardApp({
   }
 
   async function saveWorkspace(values: Workspace) {
+    const session = await getSessionOrRedirect();
+    if (!session) return;
     const { data: updated, error } = await supabase
       .from("workspaces")
       .update({

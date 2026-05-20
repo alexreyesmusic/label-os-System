@@ -40,13 +40,13 @@ export async function completeOnboarding(formData: FormData) {
   if (memberError) redirect(`/onboarding?error=${encodeURIComponent(memberError.message)}`);
 
   if (formData.get("load_sample_data") === "on") {
-    await seedSampleData(supabase, workspace.id);
+    await seedSampleData(supabase, workspace.id, authData.user.id);
   }
 
   redirect("/dashboard");
 }
 
-async function seedSampleData(supabase: Awaited<ReturnType<typeof createClient>>, workspaceId: string) {
+async function seedSampleData(supabase: Awaited<ReturnType<typeof createClient>>, workspaceId: string, userId: string) {
   const samples: Record<string, SeedRow[]> = {
     artists: [
       { name: "Miro Delta", country: "Spain", email: "miro@example.com", instagram: "@mirodelta", soundcloud: "https://soundcloud.com", status: "Active", notes: "Signature groove." },
@@ -88,7 +88,7 @@ async function seedSampleData(supabase: Awaited<ReturnType<typeof createClient>>
   for (const module of modules) {
     const rows = samples[module.table] ?? [];
     if (rows.length) {
-      await supabase.from(module.table).insert(rows.map(row => ({ ...row, workspace_id: workspaceId })));
+      await supabase.from(module.table).insert(rows.map(row => ({ ...row, workspace_id: workspaceId, created_by: userId })));
     }
   }
 }
